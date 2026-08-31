@@ -1,0 +1,394 @@
+"use strict";
+const $ = (id) => document.getElementById(id);
+const paneL = $("paneL"), paneR = $("paneR"), colL = $("colL"), colR = $("colR");
+
+const state = {
+  docId: null, name: "", kind: null, pages: null,
+  mode: "image", from: 1, to: 8, span: 8,
+  src: new Map(), trans: new Map(),
+  lEl: new Map(), rEl: new Map(),
+  pageIdx: new Map(),
+  translated: new Set(), requested: new Set(), pending: new Set(),
+  busyAll: false,
+};
+
+/* ---------- cài đặt ---------- */
+const cfg = JSON.parse(localStorage.getItem("dt.cfg") || "{}");
+const saveCfg = () => localStorage.setItem("dt.cfg", JSON.stringify(cfg));
+cfg.font = cfg.font || 17;
+cfg.zoom = cfg.zoom || 100;
+document.documentElement.style.setProperty("--font-scale", cfg.font + "px");
+document.documentElement.style.setProperty("--zoom", cfg.zoom);
+if (cfg.target) $("target").value = cfg.target;
+if (cfg.engine) $("engine").value = cfg.engine;
+if (cfg.mode) state.mode = cfg.mode;
+if (cfg.sync === false) $("syncChk").checked = false;
+if (cfg.ratio) $("split").style.gridTemplateColumns = `${cfg.ratio}fr 6px ${1 - cfg.ratio}fr`;
+toggleKey();
+
+function toast(msg, ms = 3200) {
+  const t = $("toast");
+  t.textContent = msg; t.classList.remove("hidden");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add("hidden"), ms);
+}
+function toggleKey() {
+  $("apiKey").classList.toggle("hidden", !["deepl", "anthropic", "openai"].includes($("engine").value));
+}
+async function apiJSON(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || "HTTP " + r.status);
+  return d;
+}
+
+/* ---------- mở file ---------- */
+$("btnOpen").onclick = $("btnOpen2").onclick = () => $("file").click();
+$("file").onchange = (e) => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ""; };
+const drop = $("drop");
+["dragenter", "dragover"].forEach((ev) => document.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("hidden"); drop.classList.add("dragover"); }));
+["dragleave", "drop"].forEach((ev) => document.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "dragleave" && e.relatedTarget) return; drop.classList.remove("dragover"); }));
+document.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) openFile(f); });
+
+async function openFile(file) {
+  drop.classList.remove("hidden");
+  drop.querySelector("h2").textContent = "Đang mở “" + file.name + "”…";
+  const fd = new FormData(); fd.append("file", file);
+  try {
+    const r = await fetch("/api/open", { method: "POST", body: fd });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "Lỗi mở file");
+    onOpened(data);
+  } catch (err) {
+    toast("Không mở được file: " + err.message, 6000);
+    drop.querySelector("h2").textContent = "Kéo thả file vào đây";
+  }
+}
+
+function resetDoc(data) {
+  state.docId = data.docId; state.name = data.name; state.kind = data.kind; state.pages = data.pages;
+  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear();
+  state.translated.clear(); state.requested.clear(); state.pending.clear();
+  colL.innerHTML = ""; colR.innerHTML = "";
+  io.disconnect();
+  $("docName").textContent = data.name;
+  $("btnExport").disabled = false;
+  $("btnAll").disabled = false;
+  drop.classList.add("hidden");
+}
+
+function onOpened(data) {
+  resetDoc(data);
+  if (data.kind === "pdf") {
+    document.body.classList.add("is-pdf");
+    document.body.classList.toggle("mode-image", state.mode === "image");
+    $("pgTotal").textContent = "/ " + data.pages;
+    state.from = 1; state.to = Math.min(data.pages, 8); state.span = state.to - state.from + 1;
+    $("pgFrom").value = state.from; $("pgTo").value = state.to;
+    $("pgFrom").max = data.pages; $("pgTo").max = data.pages;
+    $("btnAll").textContent = "⚡ Dịch dải trang này";
+    loadRange();
+  } else {
+    document.body.classList.remove("is-pdf", "mode-image");
+    $("btnAll").textContent = "⚡ Dịch toàn bộ";
+    buildTextBlocks(data.blocks.map((b) => ({ ...b, page: null })), false);
+    toast(`${data.blocks.length} đoạn`, 3500);
+    kickVisible();
+  }
+}
+
+/* ---------- PDF: nạp một dải trang ---------- */
+async function loadRange() {
+  if (state.kind !== "pdf") return;
+  let from = Math.max(1, parseInt($("pgFrom").value, 10) || 1);
+  let to = Math.min(state.pages, parseInt($("pgTo").value, 10) || from);
+  if (to < from) to = from;
+  if (to - from > 60) { to = from + 60; toast("Mỗi lần xem tối đa 61 trang.", 3500); }
+  state.from = from; state.to = to; state.span = to - from + 1;
+  $("pgFrom").value = from; $("pgTo").value = to;
+
+  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear();
+  state.translated.clear(); state.requested.clear(); state.pending.clear();
+  colL.innerHTML = ""; colR.innerHTML = ""; io.disconnect();
+
+  const imageMode = state.mode === "image";
+  document.body.classList.toggle("mode-image", imageMode);
+
+  if (imageMode) {
+    const fragL = document.createDocumentFragment(), fragR = document.createDocumentFragment();
+    for (let p = from; p <= to; p++) {
+      const li = document.createElement("div");
+      li.className = "pageimg"; li.dataset.page = p;
+      li.innerHTML = `<span class="lbl">Trang ${p} / ${state.pages}</span>`;
+      const img = document.createElement("img");
+      img.loading = p - from < 6 ? "eager" : "lazy";
+      img.decoding = "async";
+      img.src = `/api/page-image/${state.docId}/${p}?scale=2`;
+      const rg = document.createElement("div");
+      rg.className = "pagegrp"; rg.dataset.page = p;
+      rg.innerHTML = `<div class="pagehdr">Trang ${p}</div>`;
+      img.onload = () => { rg.style.minHeight = li.offsetHeight + "px"; };
+      li.appendChild(img);
+      fragL.appendChild(li); fragR.appendChild(rg);
+      state.pageIdx.set(p, []);
+      io.observe(li);
+    }
+    colL.appendChild(fragL); colR.appendChild(fragR);
+  }
+
+  toast(`Đang đọc chữ trang ${from}–${to}…`, 2500);
+  let data;
+  try { data = await apiJSON("/api/pages-text", { docId: state.docId, from, to }); }
+  catch (e) { toast("Lỗi đọc trang: " + e.message, 6000); return; }
+
+  if (imageMode) {
+    for (const pg of data.pages) {
+      const rg = colR.querySelector(`.pagegrp[data-page="${pg.page}"]`);
+      if (!rg) continue;
+      const arr = [];
+      for (const b of pg.blocks) {
+        state.src.set(b.i, b.text); arr.push(b.i);
+        const rb = document.createElement("div");
+        rb.className = "blk pending"; rb.dataset.i = b.i; rb.textContent = "…";
+        rg.appendChild(rb); state.rEl.set(b.i, rb);
+      }
+      state.pageIdx.set(pg.page, arr);
+    }
+  } else {
+    const fragL = document.createDocumentFragment(), fragR = document.createDocumentFragment();
+    for (const pg of data.pages) {
+      const sepL = document.createElement("div"); sepL.className = "pagesep"; sepL.textContent = `— Trang ${pg.page} —`;
+      const sepR = sepL.cloneNode(true);
+      fragL.appendChild(sepL); fragR.appendChild(sepR);
+      for (const b of pg.blocks) {
+        state.src.set(b.i, b.text);
+        const lb = document.createElement("div"); lb.className = "blk"; lb.dataset.i = b.i; lb.textContent = b.text;
+        const rb = document.createElement("div"); rb.className = "blk pending"; rb.dataset.i = b.i; rb.textContent = "…";
+        fragL.appendChild(lb); fragR.appendChild(rb);
+        state.lEl.set(b.i, lb); state.rEl.set(b.i, rb); io.observe(lb);
+      }
+    }
+    colL.appendChild(fragL); colR.appendChild(fragR);
+  }
+  if (data.scanned && data.scanned.length)
+    toast(`Trang ${data.scanned.join(", ")} là ảnh scan — đã thử OCR.`, 4500);
+  paneL.scrollTop = 0; paneR.scrollTop = 0;
+  kickVisible();
+}
+
+/* ---------- dịch: hàng đợi theo vùng nhìn ---------- */
+const io = new IntersectionObserver((ents) => {
+  for (const e of ents) {
+    if (!e.isIntersecting) continue;
+    if (e.target.classList.contains("pageimg")) {
+      const p = +e.target.dataset.page;
+      for (const i of state.pageIdx.get(p) || [])
+        if (!state.translated.has(i) && !state.requested.has(i)) state.pending.add(i);
+    } else {
+      const i = e.target.dataset.i;
+      if (i && !state.translated.has(i) && !state.requested.has(i)) state.pending.add(i);
+    }
+  }
+  kick();
+}, { root: paneL, rootMargin: "700px 0px" });
+
+function kickVisible() {
+  // ép dịch phần đang hiển thị ngay (không chờ observer)
+  const h = paneL.clientHeight || 800;
+  const scan = state.mode === "image" && state.kind === "pdf"
+    ? [...colL.children] : [...state.lEl.values()];
+  for (const el of scan) {
+    const r = el.getBoundingClientRect();
+    if (r.bottom > -500 && r.top < h + 500) {
+      if (el.classList.contains("pageimg")) {
+        for (const i of state.pageIdx.get(+el.dataset.page) || []) if (!state.translated.has(i)) state.pending.add(i);
+      } else if (el.dataset.i && !state.translated.has(el.dataset.i)) state.pending.add(el.dataset.i);
+    }
+  }
+  kick();
+}
+
+let flushTimer = null;
+function kick() { if (!flushTimer && state.pending.size) flushTimer = setTimeout(flush, 200); }
+async function flush() {
+  flushTimer = null;
+  if (!state.pending.size) return;
+  const idx = [...state.pending].slice(0, 60);
+  idx.forEach((i) => { state.pending.delete(i); state.requested.add(i); });
+  await translateBatch(idx);
+  if (state.pending.size) kick();
+}
+async function translateBatch(idx) {
+  const items = idx.map((i) => ({ i, text: state.src.get(i) || "" }));
+  try {
+    const data = await apiJSON("/api/translate", {
+      items, target: $("target").value, engine: $("engine").value,
+      apiKey: $("apiKey").value.trim() || undefined,
+    });
+    for (const [i, t] of Object.entries(data.translations)) setRight(i, t);
+    return data.engine;
+  } catch (err) {
+    idx.forEach((i) => {
+      state.requested.delete(i);
+      const el = state.rEl.get(i);
+      if (el && el.classList.contains("pending")) { el.classList.replace("pending", "err"); el.textContent = state.src.get(i); }
+    });
+    toast("Lỗi dịch: " + err.message, 5000);
+  }
+}
+function setRight(i, text) {
+  const el = state.rEl.get(i); if (!el) return;
+  el.classList.remove("pending", "err"); el.textContent = text;
+  state.trans.set(i, text); state.translated.add(i);
+}
+colR.addEventListener("click", (e) => {
+  const el = e.target.closest(".blk.err"); if (!el) return;
+  const i = el.dataset.i; state.requested.add(i);
+  el.classList.replace("err", "pending"); el.textContent = "…";
+  translateBatch([i]);
+});
+
+/* ---------- dịch cả dải ---------- */
+$("btnAll").onclick = async () => {
+  if (state.busyAll) { state.busyAll = false; return; }
+  const all = [...state.src.keys()].filter((i) => !state.translated.has(i));
+  if (!all.length) { toast("Dải trang này đã dịch xong.", 2500); return; }
+  state.busyAll = true;
+  const label = $("btnAll").textContent;
+  $("btnAll").textContent = "⏹ Dừng";
+  $("progWrap").classList.remove("hidden");
+  for (let k = 0; k < all.length && state.busyAll; k += 60) {
+    const slice = all.slice(k, k + 60).filter((i) => !state.translated.has(i));
+    slice.forEach((i) => state.requested.add(i));
+    const eng = await translateBatch(slice);
+    const done = [...state.src.keys()].filter((i) => state.translated.has(i)).length;
+    $("progBar").style.width = ((done / state.src.size) * 100).toFixed(1) + "%";
+    $("progTxt").textContent = `${done}/${state.src.size}${eng ? " · " + eng : ""}`;
+  }
+  state.busyAll = false;
+  $("btnAll").textContent = label;
+  setTimeout(() => $("progWrap").classList.add("hidden"), 1500);
+};
+
+/* ---------- cuộn đồng bộ ---------- */
+let lock = 0;
+function anchorOf(pane, col) {
+  const kids = col.children, top = pane.scrollTop;
+  let lo = 0, hi = kids.length - 1, ans = hi;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1, el = kids[mid];
+    if (el.offsetTop + el.offsetHeight > top) { ans = mid; hi = mid - 1; } else lo = mid + 1;
+  }
+  const el = kids[ans];
+  if (!el) return { idx: 0, frac: 0 };
+  return { idx: ans, frac: Math.min(1, Math.max(0, (top - el.offsetTop) / Math.max(1, el.offsetHeight))) };
+}
+function applyAnchor(pane, col, a) {
+  const el = col.children[a.idx]; if (!el) return;
+  pane.scrollTop = el.offsetTop + a.frac * el.offsetHeight;
+}
+function sync(from) {
+  if (!$("syncChk").checked) return;
+  if (performance.now() - lock < 60) return;
+  lock = performance.now();
+  if (from === "L") applyAnchor(paneR, colR, anchorOf(paneL, colL));
+  else applyAnchor(paneL, colL, anchorOf(paneR, colR));
+}
+paneL.addEventListener("scroll", () => { sync("L"); }, { passive: true });
+paneR.addEventListener("scroll", () => { sync("R"); }, { passive: true });
+paneL.addEventListener("scroll", () => { if (!flushTimer) kickVisibleThrottled(); }, { passive: true });
+let kvT = 0;
+function kickVisibleThrottled() { const n = performance.now(); if (n - kvT > 300) { kvT = n; kickVisible(); } }
+
+/* ---------- tô sáng ---------- */
+function activate(i) {
+  document.querySelectorAll(".active").forEach((el) => el.classList.remove("active"));
+  [state.lEl.get(i), state.rEl.get(i)].forEach((el) => el && el.classList.add("active"));
+}
+colL.addEventListener("click", (e) => { const el = e.target.closest(".blk"); if (el) activate(el.dataset.i); });
+colR.addEventListener("click", (e) => { const el = e.target.closest(".blk:not(.err)"); if (el) activate(el.dataset.i); });
+
+/* ---------- điều khiển PDF ---------- */
+$("pgGo").onclick = () => loadRange();
+$("pgPrev").onclick = () => { const s = state.span; $("pgFrom").value = state.from - s; $("pgTo").value = state.to - s; loadRange(); };
+$("pgNext").onclick = () => { const s = state.span; $("pgFrom").value = state.from + s; $("pgTo").value = state.to + s; loadRange(); };
+$("mImg").onclick = () => setMode("image");
+$("mTxt").onclick = () => setMode("text");
+function setMode(m) {
+  if (state.mode === m) return;
+  state.mode = m; cfg.mode = m; saveCfg();
+  $("mImg").classList.toggle("on", m === "image");
+  $("mTxt").classList.toggle("on", m === "text");
+  loadRange();
+}
+$("mImg").classList.toggle("on", state.mode === "image");
+$("mTxt").classList.toggle("on", state.mode === "text");
+$("zIn").onclick = () => setZoom(cfg.zoom + 12);
+$("zOut").onclick = () => setZoom(cfg.zoom - 12);
+function setZoom(v) { cfg.zoom = Math.max(40, Math.min(220, v)); document.documentElement.style.setProperty("--zoom", cfg.zoom); saveCfg(); }
+
+/* ---------- toolbar chung ---------- */
+$("fPlus").onclick = () => setFont(cfg.font + 1);
+$("fMinus").onclick = () => setFont(cfg.font - 1);
+function setFont(v) { cfg.font = Math.max(12, Math.min(30, v)); document.documentElement.style.setProperty("--font-scale", cfg.font + "px"); saveCfg(); }
+$("target").onchange = () => { cfg.target = $("target").value; saveCfg(); reTranslate(); };
+$("engine").onchange = () => { cfg.engine = $("engine").value; saveCfg(); toggleKey(); reTranslate(); };
+$("syncChk").onchange = () => { cfg.sync = $("syncChk").checked; saveCfg(); };
+function reTranslate() {
+  if (!state.src.size) return;
+  state.translated.clear(); state.requested.clear(); state.pending.clear();
+  for (const [i, el] of state.rEl) { el.className = "blk pending"; el.textContent = "…"; }
+  kickVisible();
+}
+
+const divider = $("divider");
+let dragging = false;
+divider.addEventListener("pointerdown", (e) => { dragging = true; divider.setPointerCapture(e.pointerId); });
+divider.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  const r = $("split").getBoundingClientRect();
+  let ratio = (e.clientX - r.left) / r.width;
+  ratio = Math.max(0.2, Math.min(0.8, ratio));
+  $("split").style.gridTemplateColumns = `${ratio}fr 6px ${1 - ratio}fr`;
+  cfg.ratio = ratio;
+});
+divider.addEventListener("pointerup", (e) => { dragging = false; divider.releasePointerCapture(e.pointerId); saveCfg(); });
+
+/* ---------- xuất song ngữ ---------- */
+$("btnExport").onclick = () => {
+  const rows = [...state.src.keys()].map((i) => {
+    const s = state.src.get(i) || "", t = state.trans.get(i) || "";
+    return `<tr><td>${esc(s)}</td><td>${esc(t)}</td></tr>`;
+  }).join("\n");
+  const html = `<!doctype html><meta charset="utf-8"><title>${esc(state.name)} — song ngữ</title>
+<style>body{font:16px/1.6 "Segoe UI",system-ui,sans-serif;margin:0;color:#1f2430}
+h1{padding:16px 24px;margin:0;border-bottom:1px solid #ddd;font-size:18px}
+table{border-collapse:collapse;width:100%}
+td{vertical-align:top;padding:10px 24px;width:50%;border-bottom:1px solid #eee;white-space:pre-wrap}
+td:first-child{border-right:1px solid #eee;background:#fafafa}</style>
+<h1>${esc(state.name)} — trang ${state.from}–${state.to}</h1><table>${rows}</table>`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  a.download = state.name.replace(/\.[^.]+$/, "") + " (song ngữ).html";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+};
+function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+/* ---------- text doc (docx/txt) ---------- */
+function buildTextBlocks(blocks) {
+  const fragL = document.createDocumentFragment(), fragR = document.createDocumentFragment();
+  for (const b of blocks) {
+    state.src.set(b.i, b.text);
+    const lb = document.createElement("div");
+    lb.className = "blk" + (b.heading ? " heading" : ""); lb.dataset.i = b.i; lb.textContent = b.text;
+    const rb = document.createElement("div");
+    rb.className = "blk pending" + (b.heading ? " heading" : ""); rb.dataset.i = b.i; rb.textContent = "…";
+    fragL.appendChild(lb); fragR.appendChild(rb);
+    state.lEl.set(b.i, lb); state.rEl.set(b.i, rb); io.observe(lb);
+  }
+  colL.appendChild(fragL); colR.appendChild(fragR);
+  paneL.scrollTop = 0; paneR.scrollTop = 0;
+}
+
+/* PWA service worker */
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});

@@ -1,0 +1,8 @@
+node_modules/
+uploads/*
+!uploads/.gitkeep
+cache/*
+!cache/.gitkeep
+*.log
+.DS_Store
+public/_*.pdf

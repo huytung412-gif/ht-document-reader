@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#2563eb" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <title>Đọc & Dịch tài liệu</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header id="bar">
+      <div class="grp">
+        <button id="btnOpen" class="btn primary">📄 Mở tài liệu</button>
+        <span id="docName" class="docname">Chưa có tài liệu</span>
+      </div>
+
+      <div class="grp pdfonly" id="pageCtl">
+        <button id="pgPrev" class="btn sm" title="Dải trang trước">◀</button>
+        <label>Trang
+          <input id="pgFrom" type="number" min="1" value="1" />–<input id="pgTo" type="number" min="1" value="8" />
+        </label>
+        <span id="pgTotal" class="muted">/ ?</span>
+        <button id="pgGo" class="btn sm">Xem</button>
+        <button id="pgNext" class="btn sm" title="Dải trang sau">▶</button>
+      </div>
+
+      <div class="grp pdfonly">
+        <span class="seg">
+          <button id="mImg" class="segbtn on">🖼 Ảnh gốc</button>
+          <button id="mTxt" class="segbtn">📝 Chỉ chữ</button>
+        </span>
+        <span class="zoomctl imgonly">
+          <button id="zOut" class="btn sm">🔍−</button>
+          <button id="zIn" class="btn sm">🔍+</button>
+        </span>
+      </div>
+
+      <div class="grp">
+        <label>Dịch sang
+          <select id="target">
+            <option value="vi" selected>Tiếng Việt</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="zh">中文</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+          </select>
+        </label>
+        <label>Bộ dịch
+          <select id="engine">
+            <option value="auto" selected>Tự động</option>
+            <option value="google">Google</option>
+            <option value="mymemory">MyMemory</option>
+            <option value="deepl">DeepL (key)</option>
+            <option value="anthropic">Claude (key)</option>
+            <option value="openai">OpenAI (key)</option>
+          </select>
+        </label>
+        <input id="apiKey" class="hidden" type="password" placeholder="API key…" autocomplete="off" />
+      </div>
+
+      <div class="grp">
+        <button id="btnAll" class="btn" disabled>⚡ Dịch dải trang này</button>
+        <label class="chk"><input type="checkbox" id="syncChk" checked /> Cuộn đồng bộ</label>
+        <span class="fontctl"><button id="fMinus" class="btn sm">A−</button><button id="fPlus" class="btn sm">A+</button></span>
+        <button id="btnExport" class="btn sm" disabled>💾 Lưu .html</button>
+      </div>
+
+      <div id="progWrap" class="hidden"><div id="progBar"></div><span id="progTxt"></span></div>
+    </header>
+
+    <main id="split">
+      <section class="pane" id="paneL"><div class="colhead">Bản gốc</div><div class="col" id="colL"></div></section>
+      <div id="divider" title="Kéo để chỉnh tỉ lệ"></div>
+      <section class="pane" id="paneR"><div class="colhead">Bản dịch</div><div class="col" id="colR"></div></section>
+    </main>
+
+    <div id="drop">
+      <div class="dropinner">
+        <div class="bigicon">📑⇄🌐</div>
+        <h2>Kéo thả file vào đây</h2>
+        <p>Hỗ trợ <b>PDF</b> (xem ảnh trang gốc, kể cả PDF scan), <b>Word .docx</b>, <b>.txt</b>, <b>.md</b></p>
+        <button id="btnOpen2" class="btn primary">Chọn file từ máy</button>
+        <p class="hint">Với PDF: mở tức thì, bạn chọn dải trang muốn dịch (không phải chờ cả file).</p>
+      </div>
+    </div>
+
+    <input id="file" type="file" class="hidden" accept=".pdf,.docx,.txt,.md,.markdown,.text,.log,.csv" />
+    <div id="toast" class="hidden"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
