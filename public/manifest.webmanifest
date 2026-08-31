@@ -1,7 +1,7 @@
 {
-  "name": "Đọc & Dịch tài liệu",
-  "short_name": "Đọc & Dịch",
-  "description": "Đọc tài liệu kỹ thuật tiếng Anh song song với bản dịch tiếng Việt, cuộn đồng bộ.",
+  "name": "HT Document Reader",
+  "short_name": "HT Reader",
+  "description": "Đọc hiểu – Dịch nhanh – Nắm trọn nội dung. Đọc tài liệu tiếng Anh song song bản dịch tiếng Việt.",
   "lang": "vi",
   "start_url": "./",
   "scope": "./",

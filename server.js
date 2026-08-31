@@ -263,7 +263,7 @@ function lanIPs() {
 }
 
 const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log("\n  Trình đọc & dịch tài liệu đang chạy.\n");
+  console.log("\n  HT Document Reader đang chạy.\n");
   console.log("  Trên máy này:       http://localhost:" + PORT);
   for (const ip of lanIPs())
     console.log("  Thiết bị cùng mạng: http://" + ip + ":" + PORT);

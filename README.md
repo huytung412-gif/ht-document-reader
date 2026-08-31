@@ -1,4 +1,4 @@
-# Đọc & Dịch tài liệu song song
+# HT Document Reader
 
 Đọc tài liệu kỹ thuật tiếng Anh cạnh bản dịch tiếng Việt. Màn hình chia đôi:
 **trái = bản gốc, phải = bản dịch**. Cuộn một bên, bên kia bám theo đúng đoạn.

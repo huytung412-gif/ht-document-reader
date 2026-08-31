@@ -36,6 +36,9 @@ body {
   z-index: 5;
 }
 .grp { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+#brand { height: 30px; width: auto; border-radius: 6px; }
+.droplogo { width: 148px; height: auto; margin-bottom: 6px; }
+.slogan { font-weight: 600; color: var(--accent) !important; margin-top: 2px !important; }
 #bar label { font-size: 12px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
 #bar select, #apiKey, #bar input[type="number"] {
   font: inherit; font-size: 13px; padding: 4px 6px;

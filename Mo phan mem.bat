@@ -1,9 +1,9 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Doc Translator
+title HT Document Reader
 echo ============================================
-echo    DOC TRANSLATOR - Doc va dich tai lieu
+echo    HT DOCUMENT READER - Doc & dich tai lieu
 echo ============================================
 echo.
 where node >nul 2>nul

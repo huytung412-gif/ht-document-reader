@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Đọc tài liệu kỹ thuật tiếng Anh song song với bản dịch tiếng Việt, cuộn đồng bộ, xem ảnh trang PDF gốc.",
+  "description": "HT Document Reader — đọc tài liệu tiếng Anh song song với bản dịch tiếng Việt, xem ảnh trang PDF gốc.",
   "scripts": {
     "start": "node server.js"
   },
