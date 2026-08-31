@@ -61,6 +61,19 @@ body {
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.sm { padding: 4px 8px; font-size: 12px; }
 
+.menu { position: relative; }
+.menupop {
+  position: absolute; right: 0; top: 100%; margin-top: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); z-index: 30;
+  display: flex; flex-direction: column; min-width: 210px;
+}
+.menupop button {
+  text-align: left; padding: 9px 12px; background: none; border: 0;
+  color: var(--ink); font: inherit; font-size: 13px; cursor: pointer;
+}
+.menupop button:hover { background: var(--field-hover); }
+
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
 .segbtn { font: inherit; font-size: 12px; padding: 5px 10px; background: var(--field-bg); color: var(--ink); border: 0; cursor: pointer; }
 .segbtn.on { background: var(--accent); color: #fff; }

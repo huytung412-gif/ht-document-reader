@@ -39,7 +39,9 @@ web cố định, chạy 24/7, mở từ bất kỳ đâu.
 | PDF: chọn trang | Ô **Trang [ ]–[ ]** + **Xem**; nút ◀ ▶ để sang dải trước/sau |
 | Đổi kiểu xem PDF | **🖼 Ảnh gốc** / **📝 Chỉ chữ** |
 | Phóng to ảnh trang | **🔍− 🔍+** |
-| Dịch cả dải trang | **⚡ Dịch dải trang này** |
+| Dịch phần đang xem | **⚡ Dịch dải trang này** |
+| Dịch cả file (chạy nền) | **📦 Dịch toàn bộ** — mở xem bản gốc trước, khi cần thì bấm để dịch hết |
+| Lưu bản dịch ra file | **💾 Lưu file ▾** → **Song ngữ (.html)** hoặc **Chỉ bản dịch (.txt)**. Nếu đã bấm *Dịch toàn bộ* thì lưu cả file, chưa thì lưu phần đang xem |
 | Cỡ chữ bản dịch | **A− A+** |
 | Cuộn 2 bên rời nhau | bỏ tick **Cuộn đồng bộ** |
 | Kéo đường giữa | đổi tỉ lệ 2 cột |

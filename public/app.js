@@ -7,9 +7,9 @@ const state = {
   mode: "image", from: 1, to: 8, span: 8,
   src: new Map(), trans: new Map(),
   lEl: new Map(), rEl: new Map(),
-  pageIdx: new Map(),
+  pageIdx: new Map(), pageOf: new Map(),
   translated: new Set(), requested: new Set(), pending: new Set(),
-  busyAll: false,
+  full: new Map(), busyAll: false, busyFull: false,
 };
 
 /* ---------- cài đặt ---------- */
@@ -66,13 +66,15 @@ async function openFile(file) {
 
 function resetDoc(data) {
   state.docId = data.docId; state.name = data.name; state.kind = data.kind; state.pages = data.pages;
-  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear();
+  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear(); state.pageOf.clear();
   state.translated.clear(); state.requested.clear(); state.pending.clear();
+  state.full.clear(); state.busyFull = false;
   colL.innerHTML = ""; colR.innerHTML = "";
   io.disconnect();
   $("docName").textContent = data.name;
   $("btnExport").disabled = false;
   $("btnAll").disabled = false;
+  $("btnFull").disabled = data.kind !== "pdf";
   drop.classList.add("hidden");
 }
 
@@ -106,7 +108,7 @@ async function loadRange() {
   state.from = from; state.to = to; state.span = to - from + 1;
   $("pgFrom").value = from; $("pgTo").value = to;
 
-  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear();
+  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear(); state.pageOf.clear();
   state.translated.clear(); state.requested.clear(); state.pending.clear();
   colL.innerHTML = ""; colR.innerHTML = ""; io.disconnect();
 
@@ -146,7 +148,7 @@ async function loadRange() {
       if (!rg) continue;
       const arr = [];
       for (const b of pg.blocks) {
-        state.src.set(b.i, b.text); arr.push(b.i);
+        state.src.set(b.i, b.text); state.pageOf.set(b.i, pg.page); arr.push(b.i);
         const rb = document.createElement("div");
         rb.className = "blk pending"; rb.dataset.i = b.i; rb.textContent = "…";
         rg.appendChild(rb); state.rEl.set(b.i, rb);
@@ -160,7 +162,7 @@ async function loadRange() {
       const sepR = sepL.cloneNode(true);
       fragL.appendChild(sepL); fragR.appendChild(sepR);
       for (const b of pg.blocks) {
-        state.src.set(b.i, b.text);
+        state.src.set(b.i, b.text); state.pageOf.set(b.i, pg.page);
         const lb = document.createElement("div"); lb.className = "blk"; lb.dataset.i = b.i; lb.textContent = b.text;
         const rb = document.createElement("div"); rb.className = "blk pending"; rb.dataset.i = b.i; rb.textContent = "…";
         fragL.appendChild(lb); fragR.appendChild(rb);
@@ -269,6 +271,53 @@ $("btnAll").onclick = async () => {
   setTimeout(() => $("progWrap").classList.add("hidden"), 1500);
 };
 
+/* ---------- dịch TOÀN BỘ tài liệu (chạy nền, để xuất file) ---------- */
+$("btnFull").onclick = async () => {
+  if (state.busyFull) { state.busyFull = false; return; }
+  if (state.kind !== "pdf") return;
+  state.busyFull = true;
+  const btn = $("btnFull"); const label = btn.textContent;
+  btn.textContent = "⏹ Dừng";
+  $("progWrap").classList.remove("hidden");
+  const STEP = 10;
+  try {
+    for (let p = 1; p <= state.pages && state.busyFull; p += STEP) {
+      const to = Math.min(state.pages, p + STEP - 1);
+      let data;
+      try { data = await apiJSON("/api/pages-text", { docId: state.docId, from: p, to }); }
+      catch (e) { toast("Lỗi đọc trang " + p + ": " + e.message, 5000); break; }
+      const items = [];
+      for (const pg of data.pages) for (const b of pg.blocks) {
+        if (!state.full.has(b.i)) state.full.set(b.i, { page: pg.page, src: b.text, trans: "" });
+        if (!state.full.get(b.i).trans) items.push({ i: b.i, text: b.text });
+      }
+      for (let k = 0; k < items.length && state.busyFull; k += 60) {
+        const chunk = items.slice(k, k + 60);
+        try {
+          const res = await apiJSON("/api/translate", {
+            items: chunk, target: $("target").value, engine: $("engine").value,
+            apiKey: $("apiKey").value.trim() || undefined,
+          });
+          for (const [i, tx] of Object.entries(res.translations)) {
+            if (state.full.get(i)) state.full.get(i).trans = tx;
+            if (state.rEl.get(i)) setRight(i, tx);
+          }
+        } catch { /* bỏ qua đoạn lỗi, dịch tiếp */ }
+      }
+      const done = Math.min(to, state.pages);
+      $("progBar").style.width = ((done / state.pages) * 100).toFixed(1) + "%";
+      $("progTxt").textContent = `Toàn bộ: trang ${done}/${state.pages}`;
+    }
+  } finally {
+    const stopped = !state.busyFull;
+    state.busyFull = false;
+    btn.textContent = label;
+    const n = [...state.full.values()].filter((v) => v.trans).length;
+    toast(`${stopped ? "Đã dừng. " : ""}Đã dịch ${n} đoạn. Bấm 💾 Lưu file → chọn định dạng để xuất.`, 6000);
+    setTimeout(() => $("progWrap").classList.add("hidden"), 2000);
+  }
+};
+
 /* ---------- cuộn đồng bộ ---------- */
 let lock = 0;
 function anchorOf(pane, col) {
@@ -353,25 +402,66 @@ divider.addEventListener("pointermove", (e) => {
 });
 divider.addEventListener("pointerup", (e) => { dragging = false; divider.releasePointerCapture(e.pointerId); saveCfg(); });
 
-/* ---------- xuất song ngữ ---------- */
-$("btnExport").onclick = () => {
-  const rows = [...state.src.keys()].map((i) => {
-    const s = state.src.get(i) || "", t = state.trans.get(i) || "";
-    return `<tr><td>${esc(s)}</td><td>${esc(t)}</td></tr>`;
-  }).join("\n");
-  const html = `<!doctype html><meta charset="utf-8"><title>${esc(state.name)} — song ngữ</title>
+/* ---------- xuất file ---------- */
+function collectPairs() {
+  if (state.full.size) {
+    return [...state.full.values()].map((v) => ({ page: v.page, src: v.src, trans: v.trans }));
+  }
+  return [...state.src.keys()].map((i) => ({
+    page: state.pageOf ? state.pageOf.get(i) : null,
+    src: state.src.get(i) || "", trans: state.trans.get(i) || "",
+  }));
+}
+const exportMenu = $("exportMenu");
+$("btnExport").onclick = (e) => { e.stopPropagation(); exportMenu.classList.toggle("hidden"); };
+document.addEventListener("click", () => exportMenu.classList.add("hidden"));
+exportMenu.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-fmt]"); if (!b) return;
+  exportMenu.classList.add("hidden");
+  exportFile(b.dataset.fmt);
+});
+
+function exportFile(fmt) {
+  const pairs = collectPairs();
+  if (!pairs.some((p) => p.trans)) { toast("Chưa có nội dung đã dịch để lưu.", 3500); return; }
+  const base = state.name.replace(/\.[^.]+$/, "");
+  const scope = state.full.size ? "toàn bộ" : (state.kind === "pdf" ? `trang ${state.from}–${state.to}` : "toàn bộ");
+  let blob, fname;
+
+  if (fmt === "txt") {
+    let out = `${base} — bản dịch (${scope})\n\n`;
+    let lastPage = null;
+    for (const p of pairs) {
+      if (p.page && p.page !== lastPage) { out += `\n===== Trang ${p.page} =====\n\n`; lastPage = p.page; }
+      if (p.trans) out += p.trans + "\n\n";
+    }
+    blob = new Blob([out], { type: "text/plain;charset=utf-8" });
+    fname = `${base} (bản dịch).txt`;
+  } else {
+    let rows = "", lastPage = null;
+    for (const p of pairs) {
+      if (p.page && p.page !== lastPage) {
+        rows += `<tr class="ph"><td colspan="2">Trang ${p.page}</td></tr>`;
+        lastPage = p.page;
+      }
+      rows += `<tr><td>${esc(p.src)}</td><td>${esc(p.trans)}</td></tr>`;
+    }
+    blob = new Blob([`<!doctype html><meta charset="utf-8"><title>${esc(base)} — song ngữ</title>
 <style>body{font:16px/1.6 "Segoe UI",system-ui,sans-serif;margin:0;color:#1f2430}
 h1{padding:16px 24px;margin:0;border-bottom:1px solid #ddd;font-size:18px}
 table{border-collapse:collapse;width:100%}
 td{vertical-align:top;padding:10px 24px;width:50%;border-bottom:1px solid #eee;white-space:pre-wrap}
-td:first-child{border-right:1px solid #eee;background:#fafafa}</style>
-<h1>${esc(state.name)} — trang ${state.from}–${state.to}</h1><table>${rows}</table>`;
+td:first-child{border-right:1px solid #eee;background:#fafafa}
+tr.ph td{background:#eef2ff;font-weight:700;color:#2563eb;text-align:center;width:auto}</style>
+<h1>${esc(base)} — bản gốc &amp; bản dịch (${scope})</h1><table>${rows}</table>`], { type: "text/html;charset=utf-8" });
+    fname = `${base} (song ngữ).html`;
+  }
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-  a.download = state.name.replace(/\.[^.]+$/, "") + " (song ngữ).html";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-};
+  a.href = URL.createObjectURL(blob);
+  a.download = fname; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast("Đã lưu: " + fname, 3500);
+}
 function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
 /* ---------- text doc (docx/txt) ---------- */

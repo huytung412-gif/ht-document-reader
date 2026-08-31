@@ -66,9 +66,16 @@
 
       <div class="grp">
         <button id="btnAll" class="btn" disabled>⚡ Dịch dải trang này</button>
+        <button id="btnFull" class="btn pdfonly" disabled>📦 Dịch toàn bộ</button>
         <label class="chk"><input type="checkbox" id="syncChk" checked /> Cuộn đồng bộ</label>
         <span class="fontctl"><button id="fMinus" class="btn sm">A−</button><button id="fPlus" class="btn sm">A+</button></span>
-        <button id="btnExport" class="btn sm" disabled>💾 Lưu .html</button>
+        <span class="menu">
+          <button id="btnExport" class="btn sm" disabled>💾 Lưu file ▾</button>
+          <div id="exportMenu" class="menupop hidden">
+            <button data-fmt="html">📄 Song ngữ (.html)</button>
+            <button data-fmt="txt">📝 Chỉ bản dịch (.txt)</button>
+          </div>
+        </span>
       </div>
 
       <div id="progWrap" class="hidden"><div id="progBar"></div><span id="progTxt"></span></div>
