@@ -927,17 +927,25 @@ const isStandalone = () =>
   matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 let deferredInstall = null;
 function showInstall(on) {
-  for (const id of ["btnInstall", "btnInstall2"]) {
+  for (const id of ["btnInstall", "btnInstall2", "installHint"]) {
     const b = $(id);
     if (b) b.classList.toggle("hidden", !on);
   }
 }
+// Hiện nút "Cài đặt thành ứng dụng" ngay khi đang dùng bản web (chưa cài).
+// Ẩn hẳn nếu đang chạy trong app đã cài.
+function updateInstall() { showInstall(!isStandalone()); }
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   deferredInstall = e;
-  if (!isStandalone()) showInstall(true);
+  updateInstall();
 });
-window.addEventListener("appinstalled", () => { deferredInstall = null; showInstall(false); });
+window.addEventListener("appinstalled", () => {
+  deferredInstall = null;
+  showInstall(false);
+  toast("Đã cài ứng dụng. Mở từ icon HT ngoài màn hình nhé!", 6000);
+});
+matchMedia("(display-mode: standalone)").addEventListener?.("change", updateInstall);
 async function doInstall() {
   if (deferredInstall) {
     deferredInstall.prompt();
@@ -946,17 +954,18 @@ async function doInstall() {
     if (outcome === "accepted") showInstall(false);
     return;
   }
-  const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const msg = iOS
-    ? "iPhone/iPad: bấm nút Chia sẻ ⬆️ ở thanh Safari → chọn “Thêm vào MH chính”."
-    : "Máy tính: bấm biểu tượng cài đặt (⊕ / màn hình nhỏ) ở cuối thanh địa chỉ → Cài đặt.";
+  const ua = navigator.userAgent;
+  const msg = /iphone|ipad|ipod/i.test(ua)
+    ? "iPhone/iPad: bấm nút Chia sẻ ⬆️ ở thanh Safari → “Thêm vào Màn hình chính”."
+    : /android/i.test(ua)
+    ? "Android: menu ⋮ của trình duyệt → “Cài đặt ứng dụng” / “Thêm vào Màn hình chính”."
+    : "Máy tính (Chrome/Edge): biểu tượng cài đặt (⊕ / màn hình nhỏ) ở cuối thanh địa chỉ → Cài đặt.";
   setAuthMsg(msg, "ok");
-  toast(msg, 7000);
+  toast(msg, 8000);
 }
 $("btnInstall").onclick = doInstall;
 $("btnInstall2").onclick = doInstall;
-// iOS không có beforeinstallprompt -> vẫn hiện nút để hướng dẫn
-if (!isStandalone() && /iphone|ipad|ipod/i.test(navigator.userAgent)) showInstall(true);
+updateInstall(); // hiện ngay khi tải trang nếu là bản web
 
 /* Service worker network-first: cần cho việc cài app + chạy offline phần vỏ. */
 if ("serviceWorker" in navigator) {
