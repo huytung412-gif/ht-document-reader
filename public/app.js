@@ -707,24 +707,38 @@ async function initGoogle() {
     document.head.appendChild(s);
   });
   if (!(window.google && google.accounts && google.accounts.id)) return;
+  const onCred = async (resp) => {
+    setAuthMsg("Đang đăng nhập bằng Google…");
+    try {
+      const r = await fetch("/api/auth/google", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: resp.credential }),
+      });
+      await handleAuthResp(r);
+    } catch (e) { setAuthMsg("Lỗi mạng: " + e.message, "err"); }
+  };
   google.accounts.id.initialize({
     client_id: conf.googleClientId,
-    callback: async (resp) => {
-      setAuthMsg("Đang đăng nhập bằng Google…");
-      try {
-        const r = await fetch("/api/auth/google", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ credential: resp.credential }),
-        });
-        await handleAuthResp(r);
-      } catch (e) { setAuthMsg("Lỗi mạng: " + e.message, "err"); }
-    },
+    callback: onCred, // dùng cho One Tap
+    ux_mode: "redirect", // nút bấm -> Google POST thẳng về server (ổn trên điện thoại)
+    login_uri: location.origin + "/api/auth/google-redirect",
+    use_fedcm_for_prompt: true,
+    itp_support: true,
+    auto_select: false,
   });
+  const w = Math.min(340, Math.max(220, ($("gsi").clientWidth || 300)));
   google.accounts.id.renderButton($("gsi"), {
-    theme: "filled_blue", size: "large", width: 300, text: "continue_with", locale: "vi",
+    theme: "filled_blue", size: "large", width: w, text: "continue_with", locale: "vi",
   });
   $("gsiWrap").classList.remove("hidden");
-  try { google.accounts.id.prompt(); } catch {}
+  // Nếu nút không bấm được (chặn popup/cookie), gợi ý dùng email
+  try {
+    google.accounts.id.prompt((n) => {
+      if (n.isNotDisplayed && n.isNotDisplayed()) {
+        // One Tap bị chặn — không sao, người dùng vẫn bấm nút hoặc dùng email
+      }
+    });
+  } catch {}
 }
 
 async function doAuth(path) {

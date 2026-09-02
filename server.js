@@ -180,36 +180,65 @@ app.get("/api/config", (_req, res) =>
   res.json({ googleClientId: GOOGLE_CLIENT_ID, mailEnabled })
 );
 
+// Xác thực credential (JWT) từ Google, trả về claims hoặc null.
+async function verifyGoogleCred(cred) {
+  if (!GOOGLE_CLIENT_ID || !cred) return null;
+  const r = await fetch(
+    "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(cred)
+  );
+  const info = await r.json().catch(() => ({}));
+  if (!r.ok) return null;
+  if (info.aud !== GOOGLE_CLIENT_ID) return null;
+  if (info.iss !== "accounts.google.com" && info.iss !== "https://accounts.google.com")
+    return null;
+  if (!info.email || String(info.email_verified) !== "true") return null;
+  if (info.exp && Date.now() / 1000 > Number(info.exp) + 60) return null;
+  return info;
+}
+
+async function finishGoogle(req, res, info, redirect) {
+  const before = auth.getUser(info.email);
+  const u = auth.upsertOAuth(info.email);
+  setSessionCookie(req, res, auth.sign(u.email));
+  if (!before && u.status !== "approved") notifyAdmins(req, u);
+  if (redirect) return res.redirect("/");
+  res.json({ email: u.email, status: u.status, role: u.role });
+}
+
+// Chế độ popup (fetch JSON)
 app.post("/api/auth/google", async (req, res) => {
   try {
-    if (!GOOGLE_CLIENT_ID)
-      return res.status(400).json({ error: "Chưa bật đăng nhập Google trên máy chủ." });
-    const cred = req.body?.credential;
-    if (!cred) return res.status(400).json({ error: "Thiếu thông tin đăng nhập Google." });
-    const r = await fetch(
-      "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(cred)
-    );
-    const info = await r.json().catch(() => ({}));
-    if (!r.ok) return res.status(401).json({ error: "Google từ chối xác thực." });
-    if (info.aud !== GOOGLE_CLIENT_ID)
-      return res.status(401).json({ error: "Thông tin không dành cho ứng dụng này." });
-    if (info.iss !== "accounts.google.com" && info.iss !== "https://accounts.google.com")
-      return res.status(401).json({ error: "Nguồn xác thực không hợp lệ." });
-    if (!info.email || String(info.email_verified) !== "true")
-      return res.status(401).json({ error: "Email Google chưa xác thực." });
-    if (info.exp && Date.now() / 1000 > Number(info.exp) + 60)
-      return res.status(401).json({ error: "Phiên Google đã hết hạn, thử lại." });
-
-    const before = auth.getUser(info.email);
-    const u = auth.upsertOAuth(info.email);
-    setSessionCookie(req, res, auth.sign(u.email));
-    if (!before && u.status !== "approved") notifyAdmins(req, u);
-    res.json({ email: u.email, status: u.status, role: u.role });
+    const info = await verifyGoogleCred(req.body?.credential);
+    if (!info) return res.status(401).json({ error: "Xác thực Google thất bại." });
+    await finishGoogle(req, res, info, false);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message || "Lỗi đăng nhập Google." });
   }
 });
+
+// Chế độ redirect (Google POST form-encoded thẳng vào đây) — ổn định trên điện thoại
+app.post(
+  "/api/auth/google-redirect",
+  express.urlencoded({ extended: false }),
+  async (req, res) => {
+    try {
+      const m = (req.headers.cookie || "").match(/(?:^|;\s*)g_csrf_token=([^;]+)/);
+      const cookieTok = m ? decodeURIComponent(m[1]) : "";
+      if (!cookieTok || !req.body.g_csrf_token || cookieTok !== req.body.g_csrf_token)
+        return res.status(400).send("Yêu cầu không hợp lệ (CSRF).");
+      const info = await verifyGoogleCred(req.body.credential);
+      if (!info)
+        return res
+          .status(401)
+          .send("<p>Xác thực Google thất bại. <a href='/'>Quay lại</a></p>");
+      await finishGoogle(req, res, info, true);
+    } catch (e) {
+      console.error(e);
+      res.status(500).send("Lỗi: " + e.message);
+    }
+  }
+);
 app.get("/api/auth/me", (req, res) => {
   const u = auth.currentUser(getToken(req));
   if (!u) return res.status(401).json({ error: "chưa đăng nhập" });
