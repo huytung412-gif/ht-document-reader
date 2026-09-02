@@ -19,3 +19,10 @@ services:
       # (Tuỳ chọn) bật nút "Đăng nhập bằng Google" — dán Client ID web từ Google Cloud.
       - key: GOOGLE_CLIENT_ID
         value: ""
+      # (Tuỳ chọn) gửi email báo admin khi có người xin quyền (Gmail + App password).
+      - key: SMTP_USER
+        value: ""
+      - key: SMTP_PASS
+        value: ""
+      - key: APP_URL
+        value: "https://ht-document-reader.onrender.com"

@@ -642,12 +642,26 @@ window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(re
 
 /* ================= Đăng nhập / quản lý người dùng ================= */
 const gate = $("authgate");
+let pendPoll = null;
+function stopPendPoll() { if (pendPoll) { clearInterval(pendPoll); pendPoll = null; } }
 function showGate(pending, email) {
   gate.classList.remove("hidden");
   $("authForm").classList.toggle("hidden", !!pending);
   $("authPending").classList.toggle("hidden", !pending);
   if (pending && email) $("pendingEmail").textContent = email;
   $("userChip").classList.add("hidden");
+  stopPendPoll();
+  if (pending) {
+    // tự vào ngay khi admin duyệt (không cần tải lại thủ công)
+    pendPoll = setInterval(async () => {
+      try {
+        const r = await fetch("/api/auth/me");
+        if (r.status === 401) { stopPendPoll(); showGate(false); return; }
+        const me = await r.json();
+        if (me.status === "approved") { stopPendPoll(); location.reload(); }
+      } catch {}
+    }, 15000);
+  }
 }
 function hideGate(me) {
   gate.classList.add("hidden");

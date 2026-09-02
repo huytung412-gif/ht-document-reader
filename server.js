@@ -17,6 +17,7 @@ import {
 } from "./lib/extract.js";
 import { translateMany } from "./lib/translate.js";
 import * as auth from "./lib/auth.js";
+import { sendMail, mailEnabled } from "./lib/mailer.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const UP = path.join(ROOT, "uploads");
@@ -61,13 +62,72 @@ function requireAdmin(req, res, next) {
   });
 }
 
-app.post("/api/auth/register", (req, res) => {
+function appUrl(req) {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+  return `${proto}://${req.headers.host}`;
+}
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+async function notifyAdmins(req, u) {
+  if (!mailEnabled || u.status === "approved") return;
+  const base = appUrl(req);
+  const tok = encodeURIComponent(auth.actionToken(u.email, u.createdAt));
+  const approve = `${base}/api/admin/action?do=approve&token=${tok}`;
+  const reject = `${base}/api/admin/action?do=reject&token=${tok}`;
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1a1f2b;line-height:1.6">
+    <h2 style="color:#2563eb;margin:0 0 6px">Yêu cầu truy cập HT Document Reader</h2>
+    <p><b>${esc(u.email)}</b> vừa đăng ký và đang <b>chờ duyệt</b>.</p>
+    <p style="margin:20px 0">
+      <a href="${approve}" style="background:#16a34a;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:700;margin-right:12px">✔ DUYỆT</a>
+      <a href="${reject}" style="background:#dc2626;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:700">✘ TỪ CHỐI</a>
+    </p>
+    <p style="color:#6b7280;font-size:12px">Bấm nút là xong, không cần mở app. Hoặc vào app → nút “👥 Người dùng”.</p>
+  </div>`;
+  try {
+    await sendMail(auth.ADMIN_EMAILS.join(","), `[HT Reader] ${u.email} xin quyền truy cập`, html);
+  } catch (e) {
+    console.warn("Gửi email admin lỗi:", e.message);
+  }
+}
+
+app.post("/api/auth/register", async (req, res) => {
   try {
     const u = auth.register(req.body?.email, req.body?.password);
     setSessionCookie(req, res, auth.sign(u.email));
+    notifyAdmins(req, u);
     res.json({ email: u.email, status: u.status, role: u.role });
   } catch (e) {
     res.status(400).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/action", (req, res) => {
+  const page = (title, msg, color) =>
+    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+<div style="font-family:Segoe UI,Arial,sans-serif;max-width:460px;margin:56px auto;text-align:center;padding:32px;border:1px solid #e5e7eb;border-radius:18px;box-shadow:0 6px 22px rgba(0,0,0,.1)">
+<h2 style="color:${color};margin:0 0 8px">${esc(title)}</h2><p style="color:#374151">${esc(msg)}</p>
+<p style="margin-top:18px"><a href="/" style="color:#2563eb;font-weight:600">Mở HT Document Reader</a></p></div>`;
+  const t = auth.verifyActionToken(req.query.token);
+  if (!t) return res.status(400).send(page("Link không hợp lệ", "Liên kết đã hỏng.", "#dc2626"));
+  const u = auth.getUser(t.email);
+  if (!u || (u.createdAt || 0) !== t.createdAt)
+    return res.status(410).send(page("Không áp dụng được", "Tài khoản không còn hoặc đã đăng ký lại.", "#dc2626"));
+  if (u.role === "admin")
+    return res.send(page("Bỏ qua", "Đây là tài khoản admin, không cần duyệt.", "#6b7280"));
+  try {
+    if (req.query.do === "approve") {
+      auth.setStatus(t.email, "approved");
+      return res.send(page("Đã duyệt ✔", `${t.email} giờ đã dùng được app.`, "#16a34a"));
+    }
+    if (req.query.do === "reject") {
+      auth.removeUser(t.email);
+      return res.send(page("Đã từ chối ✘", `Đã xoá yêu cầu của ${t.email}.`, "#dc2626"));
+    }
+    return res.status(400).send(page("Thiếu hành động", "Không rõ duyệt hay từ chối.", "#dc2626"));
+  } catch (e) {
+    return res.status(500).send(page("Lỗi", e.message, "#dc2626"));
   }
 });
 app.post("/api/auth/login", (req, res) => {
@@ -85,7 +145,9 @@ app.post("/api/auth/logout", (req, res) => {
 });
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
-app.get("/api/config", (_req, res) => res.json({ googleClientId: GOOGLE_CLIENT_ID }));
+app.get("/api/config", (_req, res) =>
+  res.json({ googleClientId: GOOGLE_CLIENT_ID, mailEnabled })
+);
 
 app.post("/api/auth/google", async (req, res) => {
   try {
@@ -107,8 +169,10 @@ app.post("/api/auth/google", async (req, res) => {
     if (info.exp && Date.now() / 1000 > Number(info.exp) + 60)
       return res.status(401).json({ error: "Phiên Google đã hết hạn, thử lại." });
 
+    const before = auth.getUser(info.email);
     const u = auth.upsertOAuth(info.email);
     setSessionCookie(req, res, auth.sign(u.email));
+    if (!before && u.status !== "approved") notifyAdmins(req, u);
     res.json({ email: u.email, status: u.status, role: u.role });
   } catch (e) {
     console.error(e);

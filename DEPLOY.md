@@ -88,6 +88,25 @@ Render tự build lại và cập nhật trong vài phút.
 - Muốn danh sách người dùng lưu vĩnh viễn: nâng lên gói **Starter ($7/tháng)** + gắn
   **Persistent Disk** mount vào thư mục `data`.
 
+### Bật email báo admin khi có người xin quyền (kèm nút Duyệt / Từ chối)
+
+Khi ai đó đăng ký, server gửi email tới **cả 2 email admin** với 2 nút **✔ DUYỆT** và
+**✘ TỪ CHỐI** ngay trong mail — bấm là xong, không cần mở app.
+
+Gửi bằng Gmail của bạn:
+
+1. Vào https://myaccount.google.com/security → bật **Xác minh 2 bước** (nếu chưa).
+2. Vào https://myaccount.google.com/apppasswords → tạo **App password** (chọn "Mail" / "Khác"),
+   copy chuỗi 16 ký tự.
+3. Trên Render → service → **Environment**, thêm/sửa:
+   - `SMTP_USER` = `huytung410@gmail.com` (hoặc 412 — email dùng để gửi)
+   - `SMTP_PASS` = chuỗi App password vừa tạo (bỏ hết dấu cách)
+   - `APP_URL` = `https://ht-document-reader.onrender.com`
+4. **Save** → Render deploy lại. Xong.
+
+Chưa đặt `SMTP_USER`/`SMTP_PASS` thì app vẫn chạy bình thường, chỉ là không có email —
+admin vào app bấm **👥 Người dùng** để duyệt.
+
 ### Bật "Đăng nhập bằng Google" (1 chạm bằng tài khoản có sẵn trong máy)
 
 1. Vào https://console.cloud.google.com/apis/credentials (đăng nhập Google).
