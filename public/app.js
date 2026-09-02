@@ -663,14 +663,56 @@ function setAuthMsg(t, cls) {
 async function checkAuth() {
   try {
     const r = await fetch("/api/auth/me");
-    if (r.status === 401) { showGate(false); return; }
+    if (r.status === 401) { showGate(false); initGoogle(); return; }
     const me = await r.json();
     if (me.status !== "approved") { showGate(true, me.email); return; }
     hideGate(me);
   } catch {
     showGate(false);
+    initGoogle();
   }
 }
+async function handleAuthResp(r) {
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { setAuthMsg(d.error || "Lỗi.", "err"); return; }
+  setAuthMsg("");
+  if (d.status !== "approved") showGate(true, d.email);
+  else location.reload();
+}
+let gsiInited = false;
+async function initGoogle() {
+  if (gsiInited) return;
+  gsiInited = true;
+  let conf;
+  try { conf = await (await fetch("/api/config")).json(); } catch { return; }
+  if (!conf || !conf.googleClientId) return;
+  await new Promise((res) => {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true; s.onload = res; s.onerror = res;
+    document.head.appendChild(s);
+  });
+  if (!(window.google && google.accounts && google.accounts.id)) return;
+  google.accounts.id.initialize({
+    client_id: conf.googleClientId,
+    callback: async (resp) => {
+      setAuthMsg("Đang đăng nhập bằng Google…");
+      try {
+        const r = await fetch("/api/auth/google", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ credential: resp.credential }),
+        });
+        await handleAuthResp(r);
+      } catch (e) { setAuthMsg("Lỗi mạng: " + e.message, "err"); }
+    },
+  });
+  google.accounts.id.renderButton($("gsi"), {
+    theme: "filled_blue", size: "large", width: 300, text: "continue_with", locale: "vi",
+  });
+  $("gsiWrap").classList.remove("hidden");
+  try { google.accounts.id.prompt(); } catch {}
+}
+
 async function doAuth(path) {
   const email = $("authEmail").value.trim();
   const password = $("authPw").value;
@@ -681,11 +723,7 @@ async function doAuth(path) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) { setAuthMsg(d.error || "Lỗi.", "err"); return; }
-    setAuthMsg("");
-    if (d.status !== "approved") showGate(true, d.email);
-    else location.reload();
+    await handleAuthResp(r);
   } catch (e) {
     setAuthMsg("Lỗi mạng: " + e.message, "err");
   }

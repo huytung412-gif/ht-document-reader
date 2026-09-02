@@ -88,6 +88,21 @@ Render tự build lại và cập nhật trong vài phút.
 - Muốn danh sách người dùng lưu vĩnh viễn: nâng lên gói **Starter ($7/tháng)** + gắn
   **Persistent Disk** mount vào thư mục `data`.
 
+### Bật "Đăng nhập bằng Google" (1 chạm bằng tài khoản có sẵn trong máy)
+
+1. Vào https://console.cloud.google.com/apis/credentials (đăng nhập Google).
+2. Tạo project mới (nếu chưa có) → **Create Credentials** → **OAuth client ID**.
+   - Nếu bị hỏi "Configure consent screen": chọn **External** → điền tên app, email hỗ trợ,
+     lưu; phần Scopes/Test users bỏ qua được.
+3. **Application type**: **Web application**.
+4. **Authorized JavaScript origins** → **Add URI**, thêm:
+   - `https://ht-document-reader.onrender.com`
+   - (nếu chạy máy) `http://localhost:8756`
+5. **Create** → copy chuỗi **Client ID** (dạng `xxxxx.apps.googleusercontent.com`).
+6. Trên Render → service → **Environment** → sửa biến **`GOOGLE_CLIENT_ID`** = chuỗi vừa copy → **Save** (Render tự deploy lại).
+7. Xong: trang đăng nhập hiện nút **"Tiếp tục với Google"** + gợi ý tài khoản đã đăng nhập sẵn.
+   (Người đăng nhập Google lần đầu vẫn ở trạng thái chờ admin duyệt như thường.)
+
 ## Nếu muốn KHÔNG ngủ + địa chỉ đẹp
 
 - Render gói trả phí ~7 USD/tháng: chạy 24/7 không ngủ, có ổ đĩa lưu vĩnh viễn

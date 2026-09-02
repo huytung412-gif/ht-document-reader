@@ -248,6 +248,13 @@ body.is-pdf.mode-image .imgonly { display: inline-flex; }
 .authlogo { width: 72px; height: 72px; }
 .authcard h2 { margin: 8px 0 2px; font-size: 22px; letter-spacing: -0.02em; }
 .authcard .slogan { color: var(--accent); font-weight: 650; font-size: 13px; margin: 0 0 18px; }
+#gsiWrap { margin-bottom: 14px; }
+#gsi { display: flex; justify-content: center; }
+.gsi-or {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 0 2px; color: var(--muted); font-size: 12px;
+}
+.gsi-or::before, .gsi-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 #authForm, #authPending { display: flex; flex-direction: column; gap: 10px; }
 .authcard input {
   font: inherit; font-size: 14px; height: 40px; padding: 0 12px;

@@ -82,6 +82,38 @@ app.post("/api/auth/logout", (req, res) => {
   res.setHeader("Set-Cookie", "dt_session=; Path=/; HttpOnly; Max-Age=0");
   res.json({ ok: true });
 });
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+app.get("/api/config", (_req, res) => res.json({ googleClientId: GOOGLE_CLIENT_ID }));
+
+app.post("/api/auth/google", async (req, res) => {
+  try {
+    if (!GOOGLE_CLIENT_ID)
+      return res.status(400).json({ error: "Chưa bật đăng nhập Google trên máy chủ." });
+    const cred = req.body?.credential;
+    if (!cred) return res.status(400).json({ error: "Thiếu thông tin đăng nhập Google." });
+    const r = await fetch(
+      "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(cred)
+    );
+    const info = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(401).json({ error: "Google từ chối xác thực." });
+    if (info.aud !== GOOGLE_CLIENT_ID)
+      return res.status(401).json({ error: "Thông tin không dành cho ứng dụng này." });
+    if (info.iss !== "accounts.google.com" && info.iss !== "https://accounts.google.com")
+      return res.status(401).json({ error: "Nguồn xác thực không hợp lệ." });
+    if (!info.email || String(info.email_verified) !== "true")
+      return res.status(401).json({ error: "Email Google chưa xác thực." });
+    if (info.exp && Date.now() / 1000 > Number(info.exp) + 60)
+      return res.status(401).json({ error: "Phiên Google đã hết hạn, thử lại." });
+
+    const u = auth.upsertOAuth(info.email);
+    setSessionCookie(req, res, auth.sign(u.email));
+    res.json({ email: u.email, status: u.status, role: u.role });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "Lỗi đăng nhập Google." });
+  }
+});
 app.get("/api/auth/me", (req, res) => {
   const u = auth.currentUser(getToken(req));
   if (!u) return res.status(401).json({ error: "chưa đăng nhập" });
