@@ -1,7 +1,7 @@
-const V = "dt-v2";
+const V = "dt-v3";
 const SHELL = [
   "./", "index.html", "app.js", "style.css",
-  "icon.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest",
+  "brand.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest",
 ];
 
 self.addEventListener("install", (e) => {

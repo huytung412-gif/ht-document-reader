@@ -118,21 +118,25 @@ async function loadRange() {
   if (imageMode) {
     const fragL = document.createDocumentFragment(), fragR = document.createDocumentFragment();
     for (let p = from; p <= to; p++) {
-      const li = document.createElement("div");
-      li.className = "pageimg"; li.dataset.page = p;
-      li.innerHTML = `<span class="lbl">Trang ${p} / ${state.pages}</span>`;
-      const img = document.createElement("img");
-      img.loading = p - from < 6 ? "eager" : "lazy";
-      img.decoding = "async";
-      img.src = `/api/page-image/${state.docId}/${p}?scale=2`;
-      const rg = document.createElement("div");
-      rg.className = "pagegrp"; rg.dataset.page = p;
-      rg.innerHTML = `<div class="pagehdr">Trang ${p}</div>`;
-      img.onload = () => { rg.style.minHeight = li.offsetHeight + "px"; };
-      li.appendChild(img);
-      fragL.appendChild(li); fragR.appendChild(rg);
+      const src = `/api/page-image/${state.docId}/${p}?scale=2`;
+      const eager = p - from < 4;
+
+      const lw = document.createElement("div");
+      lw.className = "pagewrap"; lw.dataset.page = p;
+      lw.innerHTML = `<span class="plabel">Trang ${p}/${state.pages}</span>`;
+      const limg = document.createElement("img");
+      limg.className = "page"; limg.loading = eager ? "eager" : "lazy"; limg.decoding = "async"; limg.src = src;
+      lw.appendChild(limg);
+
+      const rw = document.createElement("div");
+      rw.className = "pagewrap ov"; rw.dataset.page = p;
+      const rimg = document.createElement("img");
+      rimg.className = "page ghost"; rimg.loading = eager ? "eager" : "lazy"; rimg.decoding = "async"; rimg.src = src;
+      rw.appendChild(rimg);
+
+      fragL.appendChild(lw); fragR.appendChild(rw);
       state.pageIdx.set(p, []);
-      io.observe(li);
+      io.observe(lw);
     }
     colL.appendChild(fragL); colR.appendChild(fragR);
   }
@@ -144,15 +148,27 @@ async function loadRange() {
 
   if (imageMode) {
     for (const pg of data.pages) {
-      const rg = colR.querySelector(`.pagegrp[data-page="${pg.page}"]`);
-      if (!rg) continue;
+      const par = pg.pageW && pg.pageH ? `${pg.pageW} / ${pg.pageH}` : "";
+      const lw = colL.querySelector(`.pagewrap[data-page="${pg.page}"]`);
+      const rw = colR.querySelector(`.pagewrap[data-page="${pg.page}"]`);
+      if (par) { if (lw) lw.style.aspectRatio = par; if (rw) rw.style.aspectRatio = par; }
+      if (!rw) continue;
       const arr = [];
-      for (const b of pg.blocks) {
+      pg.blocks.forEach((b, k) => {
         state.src.set(b.i, b.text); state.pageOf.set(b.i, pg.page); arr.push(b.i);
-        const rb = document.createElement("div");
-        rb.className = "blk pending"; rb.dataset.i = b.i; rb.textContent = "…";
-        rg.appendChild(rb); state.rEl.set(b.i, rb);
-      }
+        const tb = document.createElement("div");
+        tb.className = "tblk pending"; tb.dataset.i = b.i; tb.textContent = "…";
+        if (b.bbox && pg.pageW && pg.pageH) {
+          const lx = (b.bbox.x / pg.pageW) * 100;
+          tb.style.left = lx.toFixed(2) + "%";
+          tb.style.top = ((b.bbox.y / pg.pageH) * 100).toFixed(2) + "%";
+          tb.style.width = Math.min(100 - lx, (b.bbox.w / pg.pageW) * 100 + 3).toFixed(2) + "%";
+        } else {
+          tb.style.left = "4%"; tb.style.width = "92%";
+          tb.style.top = (4 + k * 7).toFixed(2) + "%";
+        }
+        rw.appendChild(tb); state.rEl.set(b.i, tb);
+      });
       state.pageIdx.set(pg.page, arr);
     }
   } else {
@@ -181,7 +197,7 @@ async function loadRange() {
 const io = new IntersectionObserver((ents) => {
   for (const e of ents) {
     if (!e.isIntersecting) continue;
-    if (e.target.classList.contains("pageimg")) {
+    if (e.target.classList.contains("pagewrap")) {
       const p = +e.target.dataset.page;
       for (const i of state.pageIdx.get(p) || [])
         if (!state.translated.has(i) && !state.requested.has(i)) state.pending.add(i);
@@ -201,7 +217,7 @@ function kickVisible() {
   for (const el of scan) {
     const r = el.getBoundingClientRect();
     if (r.bottom > -500 && r.top < h + 500) {
-      if (el.classList.contains("pageimg")) {
+      if (el.classList.contains("pagewrap")) {
         for (const i of state.pageIdx.get(+el.dataset.page) || []) if (!state.translated.has(i)) state.pending.add(i);
       } else if (el.dataset.i && !state.translated.has(el.dataset.i)) state.pending.add(el.dataset.i);
     }
@@ -335,13 +351,15 @@ function applyAnchor(pane, col, a) {
   const el = col.children[a.idx]; if (!el) return;
   pane.scrollTop = el.offsetTop + a.frac * el.offsetHeight;
 }
-function sync(from) {
+function sync(from, force) {
   if (!$("syncChk").checked) return;
-  if (performance.now() - lock < 60) return;
+  if (!force && performance.now() - lock < 60) return;
   lock = performance.now();
   if (from === "L") applyAnchor(paneR, colR, anchorOf(paneL, colL));
   else applyAnchor(paneL, colL, anchorOf(paneR, colR));
 }
+// Bật lại "Cuộn đồng bộ" thì căn lại ngay theo bên trái.
+function resyncNow() { lock = 0; sync("L", true); }
 paneL.addEventListener("scroll", () => { sync("L"); }, { passive: true });
 paneR.addEventListener("scroll", () => { sync("R"); }, { passive: true });
 paneL.addEventListener("scroll", () => { if (!flushTimer) kickVisibleThrottled(); }, { passive: true });
@@ -381,7 +399,10 @@ $("fMinus").onclick = () => setFont(cfg.font - 1);
 function setFont(v) { cfg.font = Math.max(12, Math.min(30, v)); document.documentElement.style.setProperty("--font-scale", cfg.font + "px"); saveCfg(); }
 $("target").onchange = () => { cfg.target = $("target").value; saveCfg(); reTranslate(); };
 $("engine").onchange = () => { cfg.engine = $("engine").value; saveCfg(); toggleKey(); reTranslate(); };
-$("syncChk").onchange = () => { cfg.sync = $("syncChk").checked; saveCfg(); };
+$("syncChk").onchange = () => {
+  cfg.sync = $("syncChk").checked; saveCfg();
+  if (cfg.sync) resyncNow();
+};
 function reTranslate() {
   if (!state.src.size) return;
   state.translated.clear(); state.requested.clear(); state.pending.clear();

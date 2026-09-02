@@ -174,20 +174,26 @@ app.post("/api/pages-text", async (req, res) => {
     const pages = [];
     const scanned = [];
     for (let p = from; p <= to; p++) {
-      const fp = path.join(dir, p + ".json");
-      let blocks;
+      const fp = path.join(dir, p + ".v2.json");
+      let rec;
       if (fs.existsSync(fp)) {
-        blocks = JSON.parse(fs.readFileSync(fp, "utf8"));
+        rec = JSON.parse(fs.readFileSync(fp, "utf8"));
       } else {
         const raw = pdfPageBlocks(entry.pdf, p - 1);
-        blocks = raw.map((b, k) => ({ i: `${p}:${k}`, page: p, text: b.text, bbox: b.bbox }));
-        if (blocks.map((b) => b.text).join(" ").length < 12) scanned.push(p);
-        fs.writeFileSync(fp, JSON.stringify(blocks));
+        rec = {
+          page: p,
+          pageW: raw.pageW,
+          pageH: raw.pageH,
+          blocks: raw.blocks.map((b, k) => ({
+            i: `${p}:${k}`, page: p, text: b.text, bbox: b.bbox,
+          })),
+        };
+        fs.writeFileSync(fp, JSON.stringify(rec));
       }
-      if (!blocks.length || blocks.map((b) => b.text).join(" ").length < 12) {
+      if (!rec.blocks.length || rec.blocks.map((b) => b.text).join(" ").length < 12) {
         if (!scanned.includes(p)) scanned.push(p);
       }
-      pages.push({ page: p, blocks });
+      pages.push(rec);
     }
 
     // OCR các trang trống nếu dải trang không quá lớn
@@ -208,11 +214,12 @@ app.post("/api/pages-text", async (req, res) => {
               i: `${pg.page}:${k}`,
               page: pg.page,
               text: t,
+              bbox: null,
               ocr: true,
             }));
             fs.writeFileSync(
-              path.join(dir, pg.page + ".json"),
-              JSON.stringify(pg.blocks)
+              path.join(dir, pg.page + ".v2.json"),
+              JSON.stringify(pg)
             );
           }
         }
