@@ -22,6 +22,7 @@ document.documentElement.style.setProperty("--font-scale", cfg.font + "px");
 document.documentElement.style.setProperty("--zoom", cfg.zoom);
 if (cfg.target) $("target").value = cfg.target;
 if (cfg.engine) $("engine").value = cfg.engine;
+if (cfg.domain) $("domain").value = cfg.domain;
 if (cfg.mode) state.mode = cfg.mode;
 if (cfg.sync === false) $("syncChk").checked = false;
 if (cfg.ratio) $("split").style.gridTemplateColumns = `${cfg.ratio}fr 6px ${1 - cfg.ratio}fr`;
@@ -259,6 +260,7 @@ async function translateBatch(idx) {
   try {
     const data = await apiJSON("/api/translate", {
       items, target: $("target").value, engine: $("engine").value,
+      domain: $("domain").value,
       apiKey: $("apiKey").value.trim() || undefined,
     });
     for (const [i, t] of Object.entries(data.translations)) setRight(i, t);
@@ -350,6 +352,7 @@ $("btnFull").onclick = async () => {
         try {
           const res = await apiJSON("/api/translate", {
             items: chunk, target: $("target").value, engine: $("engine").value,
+            domain: $("domain").value,
             apiKey: $("apiKey").value.trim() || undefined,
           });
           for (const [i, tx] of Object.entries(res.translations)) {
@@ -453,15 +456,30 @@ $("fMinus").onclick = () => setFont(cfg.font - 1);
 function setFont(v) { cfg.font = Math.max(12, Math.min(30, v)); document.documentElement.style.setProperty("--font-scale", cfg.font + "px"); saveCfg(); }
 $("target").onchange = () => { cfg.target = $("target").value; saveCfg(); reTranslate(); };
 $("engine").onchange = () => { cfg.engine = $("engine").value; saveCfg(); toggleKey(); reTranslate(); };
+$("domain").onchange = () => {
+  cfg.domain = $("domain").value; saveCfg();
+  const d = $("domain").value;
+  if (d !== "general" && !["anthropic", "openai"].includes($("engine").value))
+    toast("Chuyên ngành: bộ dịch miễn phí sẽ chuẩn hoá thuật ngữ; muốn sát nghĩa nhất hãy chọn bộ dịch Claude/OpenAI + dán key.", 6000);
+  reTranslate();
+};
 $("syncChk").onchange = () => {
   cfg.sync = $("syncChk").checked; saveCfg();
   if (cfg.sync) resyncNow();
 };
 function reTranslate() {
   if (!state.src.size) return;
-  state.translated.clear(); state.requested.clear(); state.pending.clear();
-  for (const [i, el] of state.rEl) { el.className = "blk pending"; el.textContent = "…"; }
-  kickVisible();
+  state.translated.clear(); state.requested.clear(); state.pending.clear(); state.pinned.clear();
+  state.trans.clear();
+  for (const [i, el] of state.rEl) {
+    el.classList.remove("hot", "err");
+    el.classList.add("pending");
+    el.textContent = "…";
+    el.style.fontSize = ""; el.style.lineHeight = "";
+  }
+  for (const [i, el] of state.lEl) el.classList && el.classList.remove("hot");
+  for (const i of state.src.keys()) state.pending.add(i);
+  kick();
 }
 
 const divider = $("divider");

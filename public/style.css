@@ -1,13 +1,13 @@
 :root {
-  --bg: #f5f6f8;
+  --bg: #e9f0fb;
   --panel: #ffffff;
-  --panel-2: #fbfcfe;
-  --ink: #1a1f2b;
-  --muted: #6b7280;
-  --line: #e5e7eb;
-  --line-2: #d7dae0;
+  --panel-2: #f7faff;
+  --ink: #16233a;
+  --muted: #64748b;
+  --line: #dbe4f3;
+  --line-2: #c6d3e8;
   --accent: #2563eb;
-  --accent-weak: #eaf1ff;
+  --accent-weak: #e6efff;
   --hl: #fff3c4;
   --hl-line: #f0c33c;
   --danger: #b42318;
@@ -24,7 +24,10 @@
 html, body { height: 100%; margin: 0; }
 body {
   font-family: "Segoe UI", system-ui, -apple-system, "Inter", Roboto, Arial, sans-serif;
-  background: var(--bg);
+  background:
+    radial-gradient(1100px 520px at 88% -8%, rgba(59, 130, 246, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 6% 108%, rgba(37, 99, 235, 0.14), transparent 55%),
+    var(--bg);
   color: var(--ink);
   display: flex;
   flex-direction: column;
@@ -43,8 +46,8 @@ body {
   gap: 8px 14px;
   padding: 9px 14px;
   background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  box-shadow: var(--shadow-1);
+  border-bottom: 2px solid var(--accent);
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.12);
   z-index: 6;
 }
 .grp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -218,6 +221,16 @@ body.is-pdf.mode-image .imgonly { display: inline-flex; }
 .dropinner p { color: var(--muted); margin: 8px 0; font-size: 13.5px; }
 .dropinner .btn { margin-top: 8px; }
 .dropinner .hint { font-size: 12px; margin-top: 18px; color: #9aa1ac; }
+.dropinner .author { font-size: 12px; margin-top: 6px; color: var(--accent); font-weight: 600; letter-spacing: .01em; }
+
+#credit {
+  position: fixed; right: 12px; bottom: 10px; z-index: 15;
+  font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  color: var(--accent); opacity: .5;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 10px; pointer-events: none; user-select: none;
+}
 
 .hidden { display: none !important; }
 
@@ -239,10 +252,10 @@ body.is-pdf.mode-image .imgonly { display: inline-flex; }
 /* ---------- Nền tối ---------- */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1216; --panel: #171b21; --panel-2: #14181e;
-    --ink: #e7e9ee; --muted: #9aa2af;
-    --line: #262c34; --line-2: #333a44;
-    --accent-weak: #17233a;
+    --bg: #0c1119; --panel: #141a24; --panel-2: #111721;
+    --ink: #e7ebf3; --muted: #94a0b3;
+    --line: #263244; --line-2: #35435c;
+    --accent-weak: #16233c;
     --hl: #4a3f16; --hl-line: #b8912f;
     --track: #262c34;
     --ghost: 0.8;
@@ -250,7 +263,8 @@ body.is-pdf.mode-image .imgonly { display: inline-flex; }
     --shadow-2: 0 6px 22px rgba(0, 0, 0, 0.5);
   }
   .btn:active { background: #20262e; }
-  #drop { background: radial-gradient(1200px 600px at 50% -10%, #16223a 0%, var(--bg) 60%); }
+  #drop { background: radial-gradient(1200px 600px at 50% -10%, #17284a 0%, var(--bg) 60%); }
+  #credit { background: rgba(20, 26, 36, 0.7); }
   /* trang giấy giữ nền trắng; bản dịch chèn lên vẫn dùng hộp sáng để đọc rõ */
   .pagewrap, .pagewrap .page { background: #fff; }
 }

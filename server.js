@@ -239,7 +239,7 @@ app.post("/api/pages-text", async (req, res) => {
 // ---------------- Dịch (không phụ thuộc phiên) ----------------
 app.post("/api/translate", async (req, res) => {
   try {
-    const { items, target, engine, apiKey, model } = req.body || {};
+    const { items, target, engine, apiKey, model, domain } = req.body || {};
     if (!Array.isArray(items) || !items.length)
       return res.json({ translations: {}, engine: "none" });
     const texts = items.map((x) => x.text || "");
@@ -248,6 +248,7 @@ app.post("/api/translate", async (req, res) => {
       engine: engine || "auto",
       apiKey,
       model,
+      domain: domain || "general",
     });
     const out = {};
     items.forEach((x, k) => (out[x.i] = translations[k]));

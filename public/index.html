@@ -51,6 +51,26 @@
             <option value="de">Deutsch</option>
           </select>
         </label>
+        <label>Chuyên ngành
+          <select id="domain">
+            <option value="general" selected>Tổng quát</option>
+            <option value="kythuat">Kỹ thuật chung</option>
+            <option value="me">Cơ điện (M&amp;E / HVAC)</option>
+            <option value="xaydung">Xây dựng</option>
+            <option value="cokhi">Cơ khí</option>
+            <option value="dien">Điện</option>
+            <option value="cntt">CNTT / Phần mềm</option>
+            <option value="oto">Ô tô</option>
+            <option value="hoachat">Hoá chất / Quy trình</option>
+            <option value="amthuc">Ẩm thực / Nhà bếp</option>
+            <option value="dulich">Du lịch / Khách sạn</option>
+            <option value="vanphong">Kinh doanh / Công sở</option>
+            <option value="giaoduc">Giáo dục</option>
+            <option value="vanhoc">Văn học / Truyện</option>
+            <option value="yte">Y tế</option>
+            <option value="phaply">Pháp lý / Hợp đồng</option>
+          </select>
+        </label>
         <label>Bộ dịch
           <select id="engine">
             <option value="auto" selected>Tự động</option>
@@ -95,11 +115,13 @@
         <p>Kéo thả file vào đây · Hỗ trợ <b>PDF</b> (xem ảnh trang gốc, kể cả PDF scan), <b>Word .docx</b>, <b>.txt</b>, <b>.md</b></p>
         <button id="btnOpen2" class="btn primary">Chọn file từ máy</button>
         <p class="hint">Với PDF: mở tức thì, bạn chọn dải trang muốn dịch (không phải chờ cả file).</p>
+        <p class="author">Tác giả: <b>Huy Tùng UTC</b></p>
       </div>
     </div>
 
     <input id="file" type="file" class="hidden" accept=".pdf,.docx,.txt,.md,.markdown,.text,.log,.csv" />
     <div id="toast" class="hidden"></div>
+    <div id="credit" title="HT Document Reader">by Huy Tùng UTC</div>
     <script src="app.js"></script>
   </body>
 </html>
