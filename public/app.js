@@ -796,7 +796,43 @@ function userRow(u) {
 
 checkAuth();
 
-/* Nạp sw.js (bản tự gỡ) để dọn service worker + cache cũ, rồi thôi không dùng SW nữa. */
+/* ---------- Cài đặt thành ứng dụng (PWA) ---------- */
+const isStandalone = () =>
+  matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let deferredInstall = null;
+function showInstall(on) {
+  for (const id of ["btnInstall", "btnInstall2"]) {
+    const b = $(id);
+    if (b) b.classList.toggle("hidden", !on);
+  }
+}
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstall = e;
+  if (!isStandalone()) showInstall(true);
+});
+window.addEventListener("appinstalled", () => { deferredInstall = null; showInstall(false); });
+async function doInstall() {
+  if (deferredInstall) {
+    deferredInstall.prompt();
+    const { outcome } = await deferredInstall.userChoice;
+    deferredInstall = null;
+    if (outcome === "accepted") showInstall(false);
+    return;
+  }
+  const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const msg = iOS
+    ? "iPhone/iPad: bấm nút Chia sẻ ⬆️ ở thanh Safari → chọn “Thêm vào MH chính”."
+    : "Máy tính: bấm biểu tượng cài đặt (⊕ / màn hình nhỏ) ở cuối thanh địa chỉ → Cài đặt.";
+  setAuthMsg(msg, "ok");
+  toast(msg, 7000);
+}
+$("btnInstall").onclick = doInstall;
+$("btnInstall2").onclick = doInstall;
+// iOS không có beforeinstallprompt -> vẫn hiện nút để hướng dẫn
+if (!isStandalone() && /iphone|ipad|ipod/i.test(navigator.userAgent)) showInstall(true);
+
+/* Service worker network-first: cần cho việc cài app + chạy offline phần vỏ. */
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }

@@ -31,6 +31,18 @@ vào trình duyệt điện thoại/laptop khác. Lần đầu Windows hỏi Fir
 Xem **[DEPLOY.md](DEPLOY.md)** — hướng dẫn đưa lên Render.com (gói Free) để có địa chỉ
 web cố định, chạy 24/7, mở từ bất kỳ đâu.
 
+## Cài đặt thành app (không phải mở link mỗi lần)
+
+Sau khi mở địa chỉ web:
+- **Android / Chrome / Edge**: hiện nút **📲 Cài đặt thành ứng dụng** trên trang đăng nhập → bấm.
+  Hoặc menu ⋮ → *Cài đặt ứng dụng*.
+- **iPhone / iPad (Safari)**: nút Chia sẻ ⬆️ → *Thêm vào MH chính*.
+- **PC (Chrome/Edge)**: biểu tượng cài đặt (⊕) ở cuối thanh địa chỉ → *Cài đặt*.
+
+Xong sẽ có icon HT ngoài màn hình; mở ra chạy **toàn màn hình như app thật**, không có
+thanh trình duyệt. Đăng nhập 1 lần, lần sau mở app là vào thẳng (nhớ ~13 tháng, trừ khi
+đăng xuất hoặc bị admin gỡ quyền).
+
 ## Cách dùng nhanh
 
 | Thao tác | |

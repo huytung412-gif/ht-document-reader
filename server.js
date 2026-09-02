@@ -37,11 +37,12 @@ function getToken(req) {
   const m = (req.headers.cookie || "").match(/(?:^|;\s*)dt_session=([^;]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
+const SESSION_MAX_AGE = 400 * 24 * 3600; // ~13 tháng
 function setSessionCookie(req, res, token) {
   const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
   res.setHeader(
     "Set-Cookie",
-    `dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`
+    `dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}${secure}`
   );
 }
 function requireApproved(req, res, next) {
