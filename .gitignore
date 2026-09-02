@@ -6,3 +6,5 @@ cache/*
 *.log
 .DS_Store
 public/_*.pdf
+data/*
+!data/.gitkeep

@@ -16,6 +16,7 @@ import {
   kindOf,
 } from "./lib/extract.js";
 import { translateMany } from "./lib/translate.js";
+import * as auth from "./lib/auth.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const UP = path.join(ROOT, "uploads");
@@ -25,8 +26,87 @@ for (const d of [UP, IMGC, TXTC]) fs.mkdirSync(d, { recursive: true });
 
 const PORT = process.env.PORT || 8756;
 const app = express();
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "8mb" }));
 app.use(express.static(path.join(ROOT, "public")));
+
+/* ---------------- Đăng nhập / phân quyền ---------------- */
+function getToken(req) {
+  const h = req.headers.authorization || "";
+  if (h.startsWith("Bearer ")) return h.slice(7);
+  const m = (req.headers.cookie || "").match(/(?:^|;\s*)dt_session=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function setSessionCookie(req, res, token) {
+  const secure = req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
+  res.setHeader(
+    "Set-Cookie",
+    `dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`
+  );
+}
+function requireApproved(req, res, next) {
+  const u = auth.currentUser(getToken(req));
+  if (!u) return res.status(401).json({ error: "Cần đăng nhập." });
+  if (u.status !== "approved")
+    return res.status(403).json({ error: "Tài khoản đang chờ admin duyệt." });
+  req.user = u;
+  next();
+}
+function requireAdmin(req, res, next) {
+  requireApproved(req, res, () => {
+    if (req.user.role !== "admin")
+      return res.status(403).json({ error: "Chỉ admin mới được." });
+    next();
+  });
+}
+
+app.post("/api/auth/register", (req, res) => {
+  try {
+    const u = auth.register(req.body?.email, req.body?.password);
+    setSessionCookie(req, res, auth.sign(u.email));
+    res.json({ email: u.email, status: u.status, role: u.role });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+app.post("/api/auth/login", (req, res) => {
+  try {
+    const u = auth.login(req.body?.email, req.body?.password);
+    setSessionCookie(req, res, auth.sign(u.email));
+    res.json({ email: u.email, status: u.status, role: u.role });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+app.post("/api/auth/logout", (req, res) => {
+  res.setHeader("Set-Cookie", "dt_session=; Path=/; HttpOnly; Max-Age=0");
+  res.json({ ok: true });
+});
+app.get("/api/auth/me", (req, res) => {
+  const u = auth.currentUser(getToken(req));
+  if (!u) return res.status(401).json({ error: "chưa đăng nhập" });
+  res.json({ email: u.email, status: u.status, role: u.role });
+});
+
+app.get("/api/admin/users", requireAdmin, (_req, res) =>
+  res.json({ users: auth.listUsers() })
+);
+app.post("/api/admin/set", requireAdmin, (req, res) => {
+  try {
+    auth.setStatus(req.body?.email, req.body?.status);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+app.post("/api/admin/delete", requireAdmin, (req, res) => {
+  try {
+    auth.removeUser(req.body?.email);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -68,7 +148,7 @@ function rehydrateFromDisk(docId) {
 }
 
 // ---------------- Mở tài liệu ----------------
-app.post("/api/open", upload.single("file"), async (req, res) => {
+app.post("/api/open", requireApproved, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Chưa chọn file." });
     const buf = req.file.buffer;
@@ -129,7 +209,7 @@ app.post("/api/open", upload.single("file"), async (req, res) => {
 });
 
 // ---------------- Ảnh 1 trang PDF ----------------
-app.get("/api/page-image/:docId/:page", (req, res) => {
+app.get("/api/page-image/:docId/:page", requireApproved, (req, res) => {
   try {
     const docId = req.params.docId;
     const page = parseInt(req.params.page, 10); // 1-indexed
@@ -155,7 +235,7 @@ app.get("/api/page-image/:docId/:page", (req, res) => {
 });
 
 // ---------------- Text của một dải trang ----------------
-app.post("/api/pages-text", async (req, res) => {
+app.post("/api/pages-text", requireApproved, async (req, res) => {
   try {
     const { docId } = req.body || {};
     let from = parseInt(req.body.from, 10);
@@ -237,7 +317,7 @@ app.post("/api/pages-text", async (req, res) => {
 });
 
 // ---------------- Dịch (không phụ thuộc phiên) ----------------
-app.post("/api/translate", async (req, res) => {
+app.post("/api/translate", requireApproved, async (req, res) => {
   try {
     const { items, source, target, engine, apiKey, model, domain } = req.body || {};
     if (!Array.isArray(items) || !items.length)

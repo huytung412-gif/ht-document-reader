@@ -74,6 +74,20 @@ Render tự build lại và cập nhật trong vài phút.
 
 ---
 
+## Đăng nhập & duyệt người dùng
+
+- Vào app phải đăng nhập bằng email + mật khẩu. Người mới đăng ký ở trạng thái
+  **chờ duyệt**; admin (`huytung412@gmail.com` hoặc `huytung410@gmail.com`) bấm
+  **👥 Người dùng → Duyệt** thì tài khoản đó mới dùng được.
+- **Lưu ý gói Free**: danh sách người dùng (`data/users.json`) nằm trên ổ đĩa tạm,
+  **bị xoá mỗi lần deploy lại**. Sau khi cập nhật code, admin đăng nhập lại (tự
+  được duyệt) rồi duyệt lại các tài khoản.
+- **Cách giữ danh sách duyệt qua các lần deploy**: trên Render → service → **Environment**
+  → sửa biến **`PREAPPROVED_EMAILS`**, điền các email cần cho phép, cách nhau bằng
+  dấu phẩy. Ví dụ: `a@gmail.com, b@company.com`. Các email này luôn được duyệt sẵn.
+- Muốn danh sách người dùng lưu vĩnh viễn: nâng lên gói **Starter ($7/tháng)** + gắn
+  **Persistent Disk** mount vào thư mục `data`.
+
 ## Nếu muốn KHÔNG ngủ + địa chỉ đẹp
 
 - Render gói trả phí ~7 USD/tháng: chạy 24/7 không ngủ, có ổ đĩa lưu vĩnh viễn

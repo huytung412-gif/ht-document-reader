@@ -41,8 +41,15 @@ function toggleKey() {
   $("apiKey").classList.toggle("hidden", !["deepl", "anthropic", "openai"].includes($("engine").value));
 }
 async function apiJSON(path, body) {
-  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const opt = body == null
+    ? { method: "GET" }
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
   const d = await r.json().catch(() => ({}));
+  if (r.status === 401 || r.status === 403) {
+    showGate(/duyệt/.test(d.error || ""));
+    throw new Error(d.error || "Cần đăng nhập.");
+  }
   if (!r.ok) throw new Error(d.error || "HTTP " + r.status);
   return d;
 }
@@ -61,7 +68,8 @@ async function openFile(file) {
   const fd = new FormData(); fd.append("file", file);
   try {
     const r = await fetch("/api/open", { method: "POST", body: fd });
-    const data = await r.json();
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401 || r.status === 403) { showGate(/duyệt/.test(data.error || "")); return; }
     if (!r.ok) throw new Error(data.error || "Lỗi mở file");
     onOpened(data);
   } catch (err) {
@@ -631,6 +639,124 @@ function buildTextBlocks(blocks) {
 
 let rzT = 0;
 window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(refitAll, 200); });
+
+/* ================= Đăng nhập / quản lý người dùng ================= */
+const gate = $("authgate");
+function showGate(pending, email) {
+  gate.classList.remove("hidden");
+  $("authForm").classList.toggle("hidden", !!pending);
+  $("authPending").classList.toggle("hidden", !pending);
+  if (pending && email) $("pendingEmail").textContent = email;
+  $("userChip").classList.add("hidden");
+}
+function hideGate(me) {
+  gate.classList.add("hidden");
+  $("userChip").classList.remove("hidden");
+  $("meEmail").textContent = me.email;
+  $("btnUsers").classList.toggle("hidden", me.role !== "admin");
+}
+function setAuthMsg(t, cls) {
+  const m = $("authMsg");
+  m.textContent = t || "";
+  m.className = "authmsg" + (cls ? " " + cls : "");
+}
+async function checkAuth() {
+  try {
+    const r = await fetch("/api/auth/me");
+    if (r.status === 401) { showGate(false); return; }
+    const me = await r.json();
+    if (me.status !== "approved") { showGate(true, me.email); return; }
+    hideGate(me);
+  } catch {
+    showGate(false);
+  }
+}
+async function doAuth(path) {
+  const email = $("authEmail").value.trim();
+  const password = $("authPw").value;
+  if (!email || !password) { setAuthMsg("Nhập email và mật khẩu.", "err"); return; }
+  setAuthMsg("Đang xử lý…");
+  try {
+    const r = await fetch(path, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { setAuthMsg(d.error || "Lỗi.", "err"); return; }
+    setAuthMsg("");
+    if (d.status !== "approved") showGate(true, d.email);
+    else location.reload();
+  } catch (e) {
+    setAuthMsg("Lỗi mạng: " + e.message, "err");
+  }
+}
+$("btnLogin").onclick = () => doAuth("/api/auth/login");
+$("btnRegister").onclick = () => doAuth("/api/auth/register");
+$("authPw").addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth("/api/auth/login"); });
+async function logout() {
+  try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
+  location.reload();
+}
+$("btnLogout").onclick = logout;
+$("btnLogout2").onclick = logout;
+
+$("btnUsers").onclick = openAdmin;
+$("adminClose").onclick = () => $("adminModal").classList.add("hidden");
+$("adminModal").addEventListener("click", (e) => {
+  if (e.target === $("adminModal")) $("adminModal").classList.add("hidden");
+});
+async function openAdmin() {
+  $("adminModal").classList.remove("hidden");
+  const list = $("adminList");
+  list.innerHTML = "<div class='urow'>Đang tải…</div>";
+  try {
+    const { users } = await apiJSON("/api/admin/users");
+    list.innerHTML = "";
+    if (!users.length) { list.innerHTML = "<div class='urow'>Chưa có tài khoản nào.</div>"; return; }
+    for (const u of users) list.appendChild(userRow(u));
+  } catch (e) {
+    list.innerHTML = "<div class='urow'>Lỗi: " + esc(e.message) + "</div>";
+  }
+}
+function userRow(u) {
+  const row = document.createElement("div");
+  row.className = "urow";
+  const created = u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : "";
+  const isAdmin = u.role === "admin";
+  const badge = isAdmin ? "admin" : u.status;
+  const badgeTxt = isAdmin ? "ADMIN" : u.status === "approved" ? "ĐÃ DUYỆT" : "CHỜ DUYỆT";
+  row.innerHTML =
+    `<span class="ubadge ${badge}">${badgeTxt}</span>` +
+    `<div class="uinfo"><div class="uemail">${esc(u.email)}</div><div class="umeta">Đăng ký: ${created}</div></div>`;
+  if (!isAdmin) {
+    const t = document.createElement("button");
+    t.className = "btn sm";
+    t.textContent = u.status === "approved" ? "Huỷ duyệt" : "Duyệt";
+    t.onclick = async () => {
+      t.disabled = true;
+      try {
+        await apiJSON("/api/admin/set", {
+          email: u.email,
+          status: u.status === "approved" ? "pending" : "approved",
+        });
+        openAdmin();
+      } catch (e) { alert(e.message); t.disabled = false; }
+    };
+    const d = document.createElement("button");
+    d.className = "btn sm";
+    d.textContent = "Xoá";
+    d.onclick = async () => {
+      if (!confirm("Xoá tài khoản " + u.email + " ?")) return;
+      try { await apiJSON("/api/admin/delete", { email: u.email }); openAdmin(); }
+      catch (e) { alert(e.message); }
+    };
+    row.appendChild(t);
+    row.appendChild(d);
+  }
+  return row;
+}
+
+checkAuth();
 
 /* Nạp sw.js (bản tự gỡ) để dọn service worker + cache cũ, rồi thôi không dùng SW nữa. */
 if ("serviceWorker" in navigator) {

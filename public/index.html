@@ -163,8 +163,45 @@
         </span>
       </div>
 
+      <div class="grp hidden" id="userChip">
+        <button id="btnUsers" class="btn sm hidden">👥 Người dùng</button>
+        <span id="meEmail" class="meemail"></span>
+        <button id="btnLogout" class="btn sm">Đăng xuất</button>
+      </div>
+
       <div id="progWrap" class="hidden"><div id="progBar"></div><span id="progTxt"></span></div>
     </header>
+
+    <div id="authgate">
+      <div class="authcard">
+        <img class="authlogo" src="brand.svg" alt="" onerror="this.style.display='none'" />
+        <h2>HT Document Reader</h2>
+        <p class="slogan">Đăng nhập bằng email để sử dụng</p>
+        <div id="authForm">
+          <input id="authEmail" type="email" placeholder="Email" autocomplete="username" />
+          <input id="authPw" type="password" placeholder="Mật khẩu (ít nhất 6 ký tự)" autocomplete="current-password" />
+          <div id="authMsg" class="authmsg"></div>
+          <button id="btnLogin" class="btn primary wide">Đăng nhập</button>
+          <button id="btnRegister" class="btn wide">Đăng ký tài khoản mới</button>
+        </div>
+        <div id="authPending" class="hidden">
+          <p class="authmsg">Tài khoản <b id="pendingEmail"></b> đang <b>chờ admin duyệt</b>.<br />
+            Vui lòng quay lại sau khi được duyệt.</p>
+          <button id="btnLogout2" class="btn wide">Đăng xuất</button>
+        </div>
+        <p class="author">Tác giả: <b>Huy Tùng UTC</b></p>
+      </div>
+    </div>
+
+    <div id="adminModal" class="hidden">
+      <div class="admincard">
+        <div class="adminhead">
+          <b>Quản lý người dùng</b>
+          <button id="adminClose" class="btn sm">Đóng</button>
+        </div>
+        <div id="adminList" class="adminlist"></div>
+      </div>
+    </div>
 
     <main id="split">
       <section class="pane" id="paneL"><div class="colhead">Bản gốc</div><div class="col" id="colL"></div></section>
