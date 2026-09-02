@@ -84,6 +84,12 @@ function appUrl(req) {
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
+function htmlPage(title, msg, color, extra = "") {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>
+<div style="font-family:Segoe UI,Arial,sans-serif;max-width:420px;margin:56px auto;text-align:center;padding:32px;border:1px solid #e5e7eb;border-radius:18px;box-shadow:0 6px 22px rgba(0,0,0,.1)">
+<h2 style="color:${color};margin:0 0 8px">${esc(title)}</h2><p style="color:#374151">${esc(msg)}</p>${extra}
+<p style="margin-top:18px"><a href="/" style="color:#2563eb;font-weight:600">Mở HT Document Reader</a></p></div>`;
+}
 async function notifyAdmins(req, u) {
   if (!mailEnabled || u.status === "approved") return;
   const base = appUrl(req);
@@ -147,6 +153,57 @@ app.get("/api/admin/action", (req, res) => {
     return res.status(500).send(page("Lỗi", e.message, "#dc2626"));
   }
 });
+// ---- Quên mật khẩu (chỉ cho tài khoản đăng nhập bằng mật khẩu) ----
+app.post("/api/auth/forgot", async (req, res) => {
+  const key = "forgot:" + (req.ip || "?");
+  if (tooMany(key, 6)) return res.status(429).json({ error: "Thử lại sau ~10 phút." });
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const u = auth.getUser(email);
+  if (u && u.hash && mailEnabled) {
+    try {
+      const link = `${appUrl(req)}/api/auth/reset?token=${encodeURIComponent(auth.resetToken(email))}`;
+      await sendMail(
+        email,
+        "[HT Reader] Đặt lại mật khẩu",
+        `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6">
+        <p>Có yêu cầu đặt lại mật khẩu cho tài khoản <b>${esc(email)}</b> trên HT Document Reader.</p>
+        <p style="margin:18px 0"><a href="${link}" style="background:#2563eb;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:700">Đặt mật khẩu mới</a></p>
+        <p style="color:#6b7280;font-size:12px">Link có hiệu lực 1 giờ. Không phải bạn thì bỏ qua email này.</p></div>`
+      );
+    } catch (e) {
+      console.warn("Gửi email đặt lại mật khẩu lỗi:", e.message);
+    }
+  }
+  res.json({ ok: true }); // luôn ok để không lộ email nào có tài khoản
+});
+
+app.get("/api/auth/reset", (req, res) => {
+  const email = auth.verifyResetToken(req.query.token);
+  if (!email)
+    return res.status(400).send(htmlPage("Link không hợp lệ hoặc đã hết hạn", "Hãy yêu cầu lại từ trang đăng nhập.", "#dc2626"));
+  res.send(
+    htmlPage("Đặt mật khẩu mới", `Cho tài khoản ${email}`, "#2563eb",
+      `<form method="POST" action="/api/auth/reset" style="margin-top:14px">
+       <input type="hidden" name="token" value="${esc(req.query.token)}">
+       <input type="password" name="password" placeholder="Mật khẩu mới (ít nhất 6 ký tự)" required minlength="6"
+         style="width:100%;height:42px;padding:0 12px;border:1px solid #d7dae0;border-radius:10px;font-size:14px;box-sizing:border-box">
+       <button style="width:100%;height:44px;margin-top:12px;background:#2563eb;color:#fff;border:0;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer">Lưu mật khẩu mới</button>
+     </form>`)
+  );
+});
+
+app.post("/api/auth/reset", express.urlencoded({ extended: false }), (req, res) => {
+  const email = auth.verifyResetToken(req.body.token);
+  if (!email)
+    return res.status(400).send(htmlPage("Link không hợp lệ hoặc đã hết hạn", "Hãy yêu cầu lại.", "#dc2626"));
+  try {
+    auth.forceSetPassword(email, req.body.password);
+    res.send(htmlPage("Đã đổi mật khẩu ✔", "Quay lại app và đăng nhập bằng mật khẩu mới.", "#16a34a"));
+  } catch (e) {
+    res.status(400).send(htmlPage("Lỗi", e.message, "#dc2626"));
+  }
+});
+
 app.post("/api/auth/login", (req, res) => {
   const key = "login:" + (req.ip || "?");
   if (tooMany(key))
@@ -200,7 +257,7 @@ async function finishGoogle(req, res, info, redirect) {
   const u = auth.upsertOAuth(info.email);
   setSessionCookie(req, res, auth.sign(u.email));
   if (!before && u.status !== "approved") notifyAdmins(req, u);
-  if (redirect) return res.redirect("/");
+  if (redirect) return res.redirect("/?signedin=1");
   res.json({ email: u.email, status: u.status, role: u.role });
 }
 
@@ -261,6 +318,21 @@ app.post("/api/admin/delete", requireAdmin, (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/admin/test-mail", requireAdmin, async (req, res) => {
+  if (!mailEnabled)
+    return res.json({ ok: false, error: "Chưa cấu hình SMTP_USER / SMTP_PASS trên máy chủ." });
+  try {
+    await sendMail(
+      auth.ADMIN_EMAILS.join(","),
+      "[HT Reader] Email thử nghiệm",
+      `<p style="font-family:Segoe UI,Arial,sans-serif">Nếu bạn nhận được email này, chức năng gửi email báo admin đang <b>hoạt động tốt</b>. ✔</p>`
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
   }
 });
 

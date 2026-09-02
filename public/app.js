@@ -675,22 +675,30 @@ $("barMore").addEventListener("click", (e) => {
 /* ================= Đăng nhập / quản lý người dùng ================= */
 const gate = $("authgate");
 let pendPoll = null;
+let sessionMe = null;
 function stopPendPoll() { if (pendPoll) { clearInterval(pendPoll); pendPoll = null; } }
-function showGate(pending, email) {
+
+// mode: "form" (đăng nhập) | "continue" (còn phiên) | "pending" (chờ duyệt)
+function showGate(mode, email) {
+  if (mode === true) mode = "pending";
+  if (mode === false || !mode) mode = "form";
   gate.classList.remove("hidden");
-  $("authForm").classList.toggle("hidden", !!pending);
-  $("authPending").classList.toggle("hidden", !pending);
-  if (pending && email) $("pendingEmail").textContent = email;
+  $("authForm").classList.toggle("hidden", mode !== "form");
+  $("authContinue").classList.toggle("hidden", mode !== "continue");
+  $("authPending").classList.toggle("hidden", mode !== "pending");
+  $("gsiWrap").classList.toggle("hidden", mode !== "form" || !window.__gsiReady);
+  if (mode === "continue") $("continueEmail").textContent = email || "";
+  if (mode === "pending" && email) $("pendingEmail").textContent = email;
   $("userChip").classList.add("hidden");
   stopPendPoll();
-  if (pending) {
-    // tự vào ngay khi admin duyệt (không cần tải lại thủ công)
+  if (mode === "form") initGoogle();
+  if (mode === "pending") {
     pendPoll = setInterval(async () => {
       try {
         const r = await fetch("/api/auth/me");
-        if (r.status === 401) { stopPendPoll(); showGate(false); return; }
+        if (r.status === 401) { stopPendPoll(); showGate("form"); return; }
         const me = await r.json();
-        if (me.status === "approved") { stopPendPoll(); location.reload(); }
+        if (me.status === "approved") { stopPendPoll(); sessionMe = me; hideGate(me); }
       } catch {}
     }, 15000);
   }
@@ -701,29 +709,42 @@ function hideGate(me) {
   $("meEmail").textContent = me.email;
   $("btnUsers").classList.toggle("hidden", me.role !== "admin");
 }
+$("btnContinue").onclick = () => { if (sessionMe) hideGate(sessionMe); };
+$("btnOtherAcct").onclick = async () => {
+  try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
+  sessionMe = null;
+  $("authEmail").value = ""; $("authPw").value = ""; setAuthMsg("");
+  showGate("form");
+};
 function setAuthMsg(t, cls) {
   const m = $("authMsg");
   m.textContent = t || "";
   m.className = "authmsg" + (cls ? " " + cls : "");
 }
 async function checkAuth() {
+  const justSignedIn = /[?&]signedin=1/.test(location.search);
+  if (justSignedIn) history.replaceState(null, "", location.pathname);
   try {
     const r = await fetch("/api/auth/me");
-    if (r.status === 401) { showGate(false); initGoogle(); return; }
+    if (r.status === 401) { sessionMe = null; showGate("form"); return; }
     const me = await r.json();
-    if (me.status !== "approved") { showGate(true, me.email); return; }
-    hideGate(me);
+    sessionMe = me;
+    if (me.status !== "approved") { showGate("pending", me.email); return; }
+    // Luôn dừng ở màn đăng nhập; vừa đăng nhập Google xong thì vào thẳng.
+    if (justSignedIn) hideGate(me);
+    else showGate("continue", me.email);
   } catch {
-    showGate(false);
-    initGoogle();
+    sessionMe = null;
+    showGate("form");
   }
 }
 async function handleAuthResp(r) {
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { setAuthMsg(d.error || "Lỗi.", "err"); return; }
   setAuthMsg("");
-  if (d.status !== "approved") showGate(true, d.email);
-  else location.reload();
+  sessionMe = d;
+  if (d.status !== "approved") showGate("pending", d.email);
+  else hideGate(d); // vừa đăng nhập bằng email -> vào thẳng
 }
 let gsiInited = false;
 async function initGoogle() {
@@ -762,7 +783,8 @@ async function initGoogle() {
   google.accounts.id.renderButton($("gsi"), {
     theme: "filled_blue", size: "large", width: w, text: "continue_with", locale: "vi",
   });
-  $("gsiWrap").classList.remove("hidden");
+  window.__gsiReady = true;
+  if (!$("authForm").classList.contains("hidden")) $("gsiWrap").classList.remove("hidden");
   // Nếu nút không bấm được (chặn popup/cookie), gợi ý dùng email
   try {
     google.accounts.id.prompt((n) => {
@@ -790,6 +812,18 @@ async function doAuth(path) {
 }
 $("btnLogin").onclick = () => doAuth("/api/auth/login");
 $("btnRegister").onclick = () => doAuth("/api/auth/register");
+$("btnForgot").onclick = async () => {
+  const email = $("authEmail").value.trim();
+  if (!email) { setAuthMsg("Nhập email của bạn vào ô trên rồi bấm lại.", "err"); return; }
+  setAuthMsg("Đang gửi email đặt lại…");
+  try {
+    await fetch("/api/auth/forgot", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    setAuthMsg("Nếu email này có tài khoản dùng mật khẩu, link đặt lại đã được gửi tới hộp thư của bạn (xem cả spam).", "ok");
+  } catch (e) { setAuthMsg("Lỗi mạng: " + e.message, "err"); }
+};
 $("authPw").addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth("/api/auth/login"); });
 async function logout() {
   try { await fetch("/api/auth/logout", { method: "POST" }); } catch {}
@@ -823,6 +857,15 @@ $("pwSave").onclick = async () => {
 
 $("btnUsers").onclick = openAdmin;
 $("adminClose").onclick = () => $("adminModal").classList.add("hidden");
+$("btnTestMail").onclick = async () => {
+  const m = $("adminMsg");
+  m.textContent = "Đang gửi email thử…"; m.className = "authmsg";
+  try {
+    const d = await apiJSON("/api/admin/test-mail", {});
+    if (d.ok) { m.textContent = "✔ Đã gửi. Kiểm tra hộp thư (cả spam) của 2 email admin."; m.className = "authmsg ok"; }
+    else { m.textContent = "✘ Gửi lỗi: " + (d.error || "?"); m.className = "authmsg err"; }
+  } catch (e) { m.textContent = "✘ " + e.message; m.className = "authmsg err"; }
+};
 $("adminModal").addEventListener("click", (e) => {
   if (e.target === $("adminModal")) $("adminModal").classList.add("hidden");
 });

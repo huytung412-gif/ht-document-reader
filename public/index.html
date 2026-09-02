@@ -192,8 +192,14 @@
           <div id="authMsg" class="authmsg"></div>
           <button id="btnLogin" class="btn primary wide">Đăng nhập</button>
           <button id="btnRegister" class="btn wide">Lần đầu? Đăng ký tài khoản mới</button>
-          <p class="authhint">Đăng ký xong cần <b>admin duyệt</b> mới vào được (thường vài phút).
-            Sau khi được duyệt, lần sau mở app là <b>vào thẳng</b>, không phải nhập lại.</p>
+          <button id="btnForgot" type="button" class="linkbtn">Quên mật khẩu?</button>
+          <p class="authhint">Nên dùng <b>“Tiếp tục với Google”</b> ở trên — nhanh, không cần nhớ mật khẩu.
+            Đăng ký bằng email thì cần <b>admin duyệt</b> mới vào được; được duyệt rồi thì lần sau chỉ bấm 1 nút.</p>
+        </div>
+        <div id="authContinue" class="hidden">
+          <p class="authmsg">Đang đăng nhập bằng<br /><b id="continueEmail"></b></p>
+          <button id="btnContinue" class="btn primary wide">Tiếp tục vào ứng dụng</button>
+          <button id="btnOtherAcct" class="btn wide">Dùng tài khoản khác</button>
         </div>
         <div id="authPending" class="hidden">
           <p class="authmsg">Tài khoản <b id="pendingEmail"></b> đang <b>chờ admin duyệt</b>.<br />
@@ -210,8 +216,12 @@
       <div class="admincard">
         <div class="adminhead">
           <b>Quản lý người dùng</b>
-          <button id="adminClose" class="btn sm">Đóng</button>
+          <span style="display:flex;gap:8px">
+            <button id="btnTestMail" class="btn sm">✉️ Gửi thử email</button>
+            <button id="adminClose" class="btn sm">Đóng</button>
+          </span>
         </div>
+        <div id="adminMsg" class="authmsg" style="padding:0 18px"></div>
         <div id="adminList" class="adminlist"></div>
       </div>
     </div>
