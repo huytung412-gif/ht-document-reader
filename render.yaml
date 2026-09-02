@@ -16,6 +16,10 @@ services:
       # danh sách duyệt khi máy chủ khởi động lại trên gói Free.
       - key: PREAPPROVED_EMAILS
         value: ""
+      # (Tuỳ chọn) email bị CHẶN vĩnh viễn, ngăn cách bằng dấu phẩy. Dùng khi muốn
+      # thu hồi quyền một người và giữ được sau mỗi lần máy chủ khởi động lại.
+      - key: BLOCKED_EMAILS
+        value: ""
       # (Tuỳ chọn) bật nút "Đăng nhập bằng Google" — dán Client ID web từ Google Cloud.
       - key: GOOGLE_CLIENT_ID
         value: ""

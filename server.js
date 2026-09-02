@@ -60,12 +60,19 @@ function tooMany(key, max = 12, windowMs = 10 * 60 * 1000) {
 }
 function clearTries(key) { attempts.delete(key); }
 
+// Làm mới cookie phiên, nhúng "đã duyệt" để người dùng vào thẳng các lần sau
+// (kể cả khi máy chủ deploy lại làm mất danh sách người dùng).
+function refreshApproved(req, res, email) {
+  try { setSessionCookie(req, res, auth.sign(email, true)); } catch {}
+}
+
 function requireApproved(req, res, next) {
   const u = auth.currentUser(getToken(req));
   if (!u) return res.status(401).json({ error: "Cần đăng nhập." });
   if (u.status !== "approved")
     return res.status(403).json({ error: "Tài khoản đang chờ admin duyệt." });
   req.user = u;
+  refreshApproved(req, res, u.email);
   next();
 }
 function requireAdmin(req, res, next) {
@@ -118,7 +125,7 @@ app.post("/api/auth/register", async (req, res) => {
     return res.status(429).json({ error: "Đăng ký quá nhiều lần. Thử lại sau." });
   try {
     const u = auth.register(req.body?.email, req.body?.password);
-    setSessionCookie(req, res, auth.sign(u.email));
+    setSessionCookie(req, res, auth.sign(u.email, u.status === "approved"));
     notifyAdmins(req, u);
     res.json({ email: u.email, status: u.status, role: u.role });
   } catch (e) {
@@ -211,7 +218,7 @@ app.post("/api/auth/login", (req, res) => {
   try {
     const u = auth.login(req.body?.email, req.body?.password);
     clearTries(key);
-    setSessionCookie(req, res, auth.sign(u.email));
+    setSessionCookie(req, res, auth.sign(u.email, u.status === "approved"));
     res.json({ email: u.email, status: u.status, role: u.role });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -255,7 +262,7 @@ async function verifyGoogleCred(cred) {
 async function finishGoogle(req, res, info, redirect) {
   const before = auth.getUser(info.email);
   const u = auth.upsertOAuth(info.email);
-  setSessionCookie(req, res, auth.sign(u.email));
+  setSessionCookie(req, res, auth.sign(u.email, u.status === "approved"));
   if (!before && u.status !== "approved") notifyAdmins(req, u);
   if (redirect) return res.redirect("/?signedin=1");
   res.json({ email: u.email, status: u.status, role: u.role });
@@ -298,6 +305,7 @@ app.post(
 app.get("/api/auth/me", (req, res) => {
   const u = auth.currentUser(getToken(req));
   if (!u) return res.status(401).json({ error: "chưa đăng nhập" });
+  if (u.status === "approved") refreshApproved(req, res, u.email);
   res.json({ email: u.email, status: u.status, role: u.role });
 });
 
