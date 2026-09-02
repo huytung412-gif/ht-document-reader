@@ -558,5 +558,7 @@ function buildTextBlocks(blocks) {
 let rzT = 0;
 window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(refitAll, 200); });
 
-/* PWA service worker */
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+/* Nạp sw.js (bản tự gỡ) để dọn service worker + cache cũ, rồi thôi không dùng SW nữa. */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
