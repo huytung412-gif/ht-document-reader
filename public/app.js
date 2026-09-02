@@ -640,6 +640,23 @@ function buildTextBlocks(blocks) {
 let rzT = 0;
 window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(refitAll, 200); });
 
+/* ---------- Thanh công cụ gộp trên điện thoại ---------- */
+const bar = $("bar");
+$("barToggle").addEventListener("click", (e) => {
+  e.stopPropagation();
+  bar.classList.toggle("bar-open");
+});
+document.addEventListener("click", (e) => {
+  if (bar.classList.contains("bar-open") && !bar.contains(e.target))
+    bar.classList.remove("bar-open");
+});
+$("barMore").addEventListener("click", (e) => {
+  // đóng ngăn kéo sau khi bấm 1 nút hành động (không đóng khi bấm menu con / chọn select)
+  const b = e.target.closest("button");
+  if (b && !b.closest(".menu") && b.id !== "btnUsers" && b.id !== "btnPw")
+    bar.classList.remove("bar-open");
+});
+
 /* ================= Đăng nhập / quản lý người dùng ================= */
 const gate = $("authgate");
 let pendPoll = null;

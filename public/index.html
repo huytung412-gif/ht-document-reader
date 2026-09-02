@@ -12,12 +12,14 @@
   </head>
   <body>
     <header id="bar">
-      <div class="grp">
+      <div class="grp" id="barMain">
         <img id="brand" src="brand.svg" alt="HT Document Reader" onerror="this.style.display='none'" />
         <button id="btnOpen" class="btn primary">📄 Mở tài liệu</button>
         <span id="docName" class="docname">Chưa có tài liệu</span>
+        <button id="barToggle" class="btn sm" aria-label="Công cụ">⚙️ Công cụ</button>
       </div>
 
+      <div id="barMore">
       <div class="grp pdfonly" id="pageCtl">
         <button id="pgPrev" class="btn sm" title="Dải trang trước">◀</button>
         <label>Trang
@@ -170,6 +172,7 @@
         <span id="meEmail" class="meemail"></span>
         <button id="btnLogout" class="btn sm">Đăng xuất</button>
       </div>
+      </div><!-- /#barMore -->
 
       <div id="progWrap" class="hidden"><div id="progBar"></div><span id="progTxt"></span></div>
     </header>
