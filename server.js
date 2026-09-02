@@ -174,7 +174,7 @@ app.post("/api/pages-text", async (req, res) => {
     const pages = [];
     const scanned = [];
     for (let p = from; p <= to; p++) {
-      const fp = path.join(dir, p + ".v2.json");
+      const fp = path.join(dir, p + ".v3.json");
       let rec;
       if (fs.existsSync(fp)) {
         rec = JSON.parse(fs.readFileSync(fp, "utf8"));
@@ -184,13 +184,14 @@ app.post("/api/pages-text", async (req, res) => {
           page: p,
           pageW: raw.pageW,
           pageH: raw.pageH,
+          rawLen: raw.rawLen,
           blocks: raw.blocks.map((b, k) => ({
             i: `${p}:${k}`, page: p, text: b.text, bbox: b.bbox,
           })),
         };
         fs.writeFileSync(fp, JSON.stringify(rec));
       }
-      if (!rec.blocks.length || rec.blocks.map((b) => b.text).join(" ").length < 12) {
+      if ((rec.rawLen || 0) < 12) {
         if (!scanned.includes(p)) scanned.push(p);
       }
       pages.push(rec);
@@ -218,7 +219,7 @@ app.post("/api/pages-text", async (req, res) => {
               ocr: true,
             }));
             fs.writeFileSync(
-              path.join(dir, pg.page + ".v2.json"),
+              path.join(dir, pg.page + ".v3.json"),
               JSON.stringify(pg)
             );
           }

@@ -185,7 +185,8 @@ body.is-pdf.mode-image .imgonly { display: inline-flex; }
 .tblk.err { color: var(--danger); }
 .tblk.err::after { content: " ⟳"; color: var(--accent); }
 .tblk.active { outline: 2px solid var(--hl-line); background: var(--hl); }
-.tblk:hover { z-index: 20; box-shadow: 0 4px 14px rgba(16, 24, 40, 0.22); }
+/* rê chuột: hiện đầy đủ đoạn dịch dù đã bị thu gọn */
+.tblk:hover { z-index: 25; max-height: none !important; overflow: visible !important; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.28); }
 
 /* ---------- Màn hình thả file ---------- */
 #drop {

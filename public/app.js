@@ -160,9 +160,18 @@ async function loadRange() {
         tb.className = "tblk pending"; tb.dataset.i = b.i; tb.textContent = "…";
         if (b.bbox && pg.pageW && pg.pageH) {
           const lx = (b.bbox.x / pg.pageW) * 100;
+          // chỗ trống tới đoạn kế tiếp -> cho phép cao tối đa tới đó (không đè nhau)
+          let nextY = pg.pageH;
+          for (let j = k + 1; j < pg.blocks.length; j++) {
+            if (pg.blocks[j].bbox) { nextY = pg.blocks[j].bbox.y; break; }
+          }
+          const srcH = (b.bbox.h / pg.pageH) * 100;
+          const gapH = ((nextY - b.bbox.y) / pg.pageH) * 100 - 0.4;
           tb.style.left = lx.toFixed(2) + "%";
           tb.style.top = ((b.bbox.y / pg.pageH) * 100).toFixed(2) + "%";
-          tb.style.width = Math.min(100 - lx, (b.bbox.w / pg.pageW) * 100 + 3).toFixed(2) + "%";
+          tb.style.width = Math.min(100 - lx, (b.bbox.w / pg.pageW) * 100 + 4).toFixed(2) + "%";
+          tb.style.maxHeight = Math.min(Math.max(srcH, gapH), 48).toFixed(2) + "%";
+          tb.style.overflow = "hidden";
         } else {
           tb.style.left = "4%"; tb.style.width = "92%";
           tb.style.top = (4 + k * 7).toFixed(2) + "%";
@@ -257,6 +266,24 @@ function setRight(i, text) {
   const el = state.rEl.get(i); if (!el) return;
   el.classList.remove("pending", "err"); el.textContent = text;
   state.trans.set(i, text); state.translated.add(i);
+  if (el.style.maxHeight) fitText(el);
+}
+// Thu nhỏ cỡ chữ bản dịch cho vừa đúng ô của đoạn gốc -> không tràn, không lệch dòng.
+function fitText(el) {
+  el.style.fontSize = ""; el.style.lineHeight = "";
+  if (!el.style.maxHeight) return;
+  let fs = parseFloat(getComputedStyle(el).fontSize) || 12;
+  let guard = 0;
+  while (el.scrollHeight > el.clientHeight + 1 && fs > 6 && guard++ < 44) {
+    fs -= 0.5;
+    el.style.fontSize = fs + "px";
+    if (fs <= 10) el.style.lineHeight = "1.14";
+  }
+}
+function refitAll() {
+  requestAnimationFrame(() => {
+    for (const el of state.rEl.values()) if (el.style.maxHeight) fitText(el);
+  });
 }
 colR.addEventListener("click", (e) => {
   const el = e.target.closest(".blk.err"); if (!el) return;
@@ -391,7 +418,7 @@ $("mImg").classList.toggle("on", state.mode === "image");
 $("mTxt").classList.toggle("on", state.mode === "text");
 $("zIn").onclick = () => setZoom(cfg.zoom + 12);
 $("zOut").onclick = () => setZoom(cfg.zoom - 12);
-function setZoom(v) { cfg.zoom = Math.max(40, Math.min(220, v)); document.documentElement.style.setProperty("--zoom", cfg.zoom); saveCfg(); }
+function setZoom(v) { cfg.zoom = Math.max(40, Math.min(220, v)); document.documentElement.style.setProperty("--zoom", cfg.zoom); saveCfg(); refitAll(); }
 
 /* ---------- toolbar chung ---------- */
 $("fPlus").onclick = () => setFont(cfg.font + 1);
@@ -500,6 +527,9 @@ function buildTextBlocks(blocks) {
   colL.appendChild(fragL); colR.appendChild(fragR);
   paneL.scrollTop = 0; paneR.scrollTop = 0;
 }
+
+let rzT = 0;
+window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(refitAll, 200); });
 
 /* PWA service worker */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
