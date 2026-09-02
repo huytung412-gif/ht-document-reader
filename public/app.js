@@ -9,6 +9,7 @@ const state = {
   lEl: new Map(), rEl: new Map(),
   pageIdx: new Map(), pageOf: new Map(),
   translated: new Set(), requested: new Set(), pending: new Set(),
+  pinned: new Set(),
   full: new Map(), busyAll: false, busyFull: false,
 };
 
@@ -66,7 +67,7 @@ async function openFile(file) {
 
 function resetDoc(data) {
   state.docId = data.docId; state.name = data.name; state.kind = data.kind; state.pages = data.pages;
-  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear(); state.pageOf.clear();
+  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear(); state.pageOf.clear(); state.pinned.clear();
   state.translated.clear(); state.requested.clear(); state.pending.clear();
   state.full.clear(); state.busyFull = false;
   colL.innerHTML = ""; colR.innerHTML = "";
@@ -108,7 +109,7 @@ async function loadRange() {
   state.from = from; state.to = to; state.span = to - from + 1;
   $("pgFrom").value = from; $("pgTo").value = to;
 
-  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear(); state.pageOf.clear();
+  state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear(); state.pageOf.clear(); state.pinned.clear();
   state.translated.clear(); state.requested.clear(); state.pending.clear();
   colL.innerHTML = ""; colR.innerHTML = ""; io.disconnect();
 
@@ -116,6 +117,8 @@ async function loadRange() {
   document.body.classList.toggle("mode-image", imageMode);
 
   if (imageMode) {
+    // khoá tỉ lệ 50/50 để 2 bên khớp tuyệt đối
+    $("split").style.gridTemplateColumns = "1fr 8px 1fr";
     const fragL = document.createDocumentFragment(), fragR = document.createDocumentFragment();
     for (let p = from; p <= to; p++) {
       const src = `/api/page-image/${state.docId}/${p}?scale=2`;
@@ -139,6 +142,8 @@ async function loadRange() {
       io.observe(lw);
     }
     colL.appendChild(fragL); colR.appendChild(fragR);
+  } else {
+    $("split").style.gridTemplateColumns = cfg.ratio ? `${cfg.ratio}fr 8px ${1 - cfg.ratio}fr` : "1fr 8px 1fr";
   }
 
   toast(`Đang đọc chữ trang ${from}–${to}…`, 2500);
@@ -152,30 +157,19 @@ async function loadRange() {
       const lw = colL.querySelector(`.pagewrap[data-page="${pg.page}"]`);
       const rw = colR.querySelector(`.pagewrap[data-page="${pg.page}"]`);
       if (par) { if (lw) lw.style.aspectRatio = par; if (rw) rw.style.aspectRatio = par; }
-      if (!rw) continue;
+      if (!rw || !lw) continue;
       const arr = [];
       pg.blocks.forEach((b, k) => {
         state.src.set(b.i, b.text); state.pageOf.set(b.i, pg.page); arr.push(b.i);
+        // vùng bấm trên ảnh gốc (bên trái) — trùng khít khung đoạn
+        const rg = document.createElement("div");
+        rg.className = "rgn"; rg.dataset.i = b.i;
+        placeBox(rg, b.bbox, pg, k);
+        lw.appendChild(rg); state.lEl.set(b.i, rg);
+        // ô dịch (bên phải) — cắt đúng khung đoạn gốc, không tràn
         const tb = document.createElement("div");
         tb.className = "tblk pending"; tb.dataset.i = b.i; tb.textContent = "…";
-        if (b.bbox && pg.pageW && pg.pageH) {
-          const lx = (b.bbox.x / pg.pageW) * 100;
-          // chỗ trống tới đoạn kế tiếp -> cho phép cao tối đa tới đó (không đè nhau)
-          let nextY = pg.pageH;
-          for (let j = k + 1; j < pg.blocks.length; j++) {
-            if (pg.blocks[j].bbox) { nextY = pg.blocks[j].bbox.y; break; }
-          }
-          const srcH = (b.bbox.h / pg.pageH) * 100;
-          const gapH = ((nextY - b.bbox.y) / pg.pageH) * 100 - 0.4;
-          tb.style.left = lx.toFixed(2) + "%";
-          tb.style.top = ((b.bbox.y / pg.pageH) * 100).toFixed(2) + "%";
-          tb.style.width = Math.min(100 - lx, (b.bbox.w / pg.pageW) * 100 + 4).toFixed(2) + "%";
-          tb.style.maxHeight = Math.min(Math.max(srcH, gapH), 48).toFixed(2) + "%";
-          tb.style.overflow = "hidden";
-        } else {
-          tb.style.left = "4%"; tb.style.width = "92%";
-          tb.style.top = (4 + k * 7).toFixed(2) + "%";
-        }
+        placeBox(tb, b.bbox, pg, k, true);
         rw.appendChild(tb); state.rEl.set(b.i, tb);
       });
       state.pageIdx.set(pg.page, arr);
@@ -200,6 +194,22 @@ async function loadRange() {
     toast(`Trang ${data.scanned.join(", ")} là ảnh scan — đã thử OCR.`, 4500);
   paneL.scrollTop = 0; paneR.scrollTop = 0;
   kickVisible();
+}
+
+// Đặt phần tử phủ đúng khung đoạn gốc (theo % của trang) — dùng chung cho cả 2 bên
+// nên vị trí trùng khít 100%.
+function placeBox(el, bbox, pg, k, strict) {
+  if (bbox && pg.pageW && pg.pageH) {
+    const lx = (bbox.x / pg.pageW) * 100;
+    el.style.left = lx.toFixed(3) + "%";
+    el.style.top = ((bbox.y / pg.pageH) * 100).toFixed(3) + "%";
+    el.style.width = Math.min(100 - lx, (bbox.w / pg.pageW) * 100 + 1.5).toFixed(3) + "%";
+    el.style.height = Math.max((bbox.h / pg.pageH) * 100, 1).toFixed(3) + "%";
+  } else {
+    el.style.left = "5%"; el.style.width = "90%";
+    el.style.top = (5 + k * 6).toFixed(2) + "%"; el.style.height = "5%";
+  }
+  if (strict) el.style.overflow = "hidden";
 }
 
 /* ---------- dịch: hàng đợi theo vùng nhìn ---------- */
@@ -266,23 +276,24 @@ function setRight(i, text) {
   const el = state.rEl.get(i); if (!el) return;
   el.classList.remove("pending", "err"); el.textContent = text;
   state.trans.set(i, text); state.translated.add(i);
-  if (el.style.maxHeight) fitText(el);
+  if (el.classList.contains("tblk") && el.style.height) fitText(el);
 }
-// Thu nhỏ cỡ chữ bản dịch cho vừa đúng ô của đoạn gốc -> không tràn, không lệch dòng.
+// Thu nhỏ cỡ chữ bản dịch cho vừa đúng khung đoạn gốc -> không tràn, không lệch dòng.
 function fitText(el) {
   el.style.fontSize = ""; el.style.lineHeight = "";
-  if (!el.style.maxHeight) return;
+  if (!el.style.height) return;
   let fs = parseFloat(getComputedStyle(el).fontSize) || 12;
   let guard = 0;
-  while (el.scrollHeight > el.clientHeight + 1 && fs > 6 && guard++ < 44) {
+  while (el.scrollHeight > el.clientHeight + 1 && fs > 5 && guard++ < 50) {
     fs -= 0.5;
     el.style.fontSize = fs + "px";
-    if (fs <= 10) el.style.lineHeight = "1.14";
+    if (fs <= 10) el.style.lineHeight = "1.12";
   }
 }
 function refitAll() {
   requestAnimationFrame(() => {
-    for (const el of state.rEl.values()) if (el.style.maxHeight) fitText(el);
+    for (const el of state.rEl.values())
+      if (el.classList && el.classList.contains("tblk") && el.style.height) fitText(el);
   });
 }
 colR.addEventListener("click", (e) => {
@@ -393,13 +404,29 @@ paneL.addEventListener("scroll", () => { if (!flushTimer) kickVisibleThrottled()
 let kvT = 0;
 function kickVisibleThrottled() { const n = performance.now(); if (n - kvT > 300) { kvT = n; kickVisible(); } }
 
-/* ---------- tô sáng ---------- */
-function activate(i) {
-  document.querySelectorAll(".active").forEach((el) => el.classList.remove("active"));
-  [state.lEl.get(i), state.rEl.get(i)].forEach((el) => el && el.classList.add("active"));
+/* ---------- Tô sáng 2 bên khi rê / bấm ---------- */
+function markHot(i, on) {
+  const a = state.lEl.get(i), b = state.rEl.get(i);
+  if (a) a.classList.toggle("hot", on);
+  if (b) b.classList.toggle("hot", on);
 }
-colL.addEventListener("click", (e) => { const el = e.target.closest(".blk"); if (el) activate(el.dataset.i); });
-colR.addEventListener("click", (e) => { const el = e.target.closest(".blk:not(.err)"); if (el) activate(el.dataset.i); });
+function wireHot(col) {
+  col.addEventListener("mouseover", (e) => {
+    const el = e.target.closest("[data-i]"); if (el) markHot(el.dataset.i, true);
+  });
+  col.addEventListener("mouseout", (e) => {
+    const el = e.target.closest("[data-i]");
+    if (el && !state.pinned.has(el.dataset.i)) markHot(el.dataset.i, false);
+  });
+  col.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-i]"); if (!el) return;
+    const i = el.dataset.i;
+    if (el.classList.contains("err")) return;
+    if (state.pinned.has(i)) { state.pinned.delete(i); markHot(i, false); }
+    else { state.pinned.add(i); markHot(i, true); }
+  });
+}
+wireHot(colL); wireHot(colR);
 
 /* ---------- điều khiển PDF ---------- */
 $("pgGo").onclick = () => loadRange();

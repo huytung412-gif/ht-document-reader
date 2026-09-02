@@ -12,7 +12,7 @@
   --hl-line: #f0c33c;
   --danger: #b42318;
   --track: #e9ebef;
-  --ghost: 0.95;
+  --ghost: 0.82;
   --font-scale: 17px;
   --zoom: 100;
   --pageh: calc(var(--zoom) * 8.6px);
@@ -136,6 +136,7 @@ body.is-pdf.mode-image .imgonly { display: inline-flex; }
 .blk:hover { background: rgba(37, 99, 235, 0.055); }
 .blk.active { background: var(--hl); border-left-color: var(--hl-line); }
 .blk.heading { font-weight: 750; font-size: calc(var(--font-scale) + 3px); letter-spacing: -0.01em; }
+.blk.hot { background: var(--hl); border-left-color: var(--hl-line); }
 #colR .blk.pending { color: var(--muted); font-style: italic; opacity: .8; }
 #colR .blk.err { color: var(--danger); font-style: normal; }
 #colR .blk.err::after { content: " ⟳ thử lại"; font-size: 12px; color: var(--accent); font-style: normal; }
@@ -168,25 +169,34 @@ body.is-pdf.mode-image .imgonly { display: inline-flex; }
   background: rgba(255, 255, 255, 0.9); border: 1px solid var(--line);
   border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 600; color: var(--muted);
 }
+/* Vùng bấm vô hình trên ảnh gốc (bên trái) — trùng khít khung đoạn */
+.rgn {
+  position: absolute; z-index: 3; cursor: pointer; border-radius: 3px;
+  transition: background .1s, box-shadow .1s;
+}
+.rgn.hot { background: rgba(37, 99, 235, 0.16); box-shadow: 0 0 0 2px var(--accent) inset; }
+
 .tblk {
   position: absolute; z-index: 4;
-  padding: 1px 5px;
-  font-size: calc(var(--pageh) / 66);
-  line-height: 1.24;
-  color: #1a1f2b;
-  background: #ffffff;
-  border: 1px solid #dfe3ea;
-  border-radius: 4px;
-  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.12);
+  padding: 0 4px;
+  font-size: calc(var(--pageh) / 70);
+  line-height: 1.12;
+  color: #14181f;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid #e2e6ec;
+  border-radius: 3px;
   overflow-wrap: anywhere;
   cursor: pointer;
 }
-.tblk.pending { color: #8a909c; font-style: italic; background: rgba(255, 255, 255, 0.75); box-shadow: none; }
-.tblk.err { color: var(--danger); }
+.tblk.pending { color: #9aa1ad; font-style: italic; background: rgba(255, 255, 255, 0.55); border-color: transparent; }
+.tblk.err { color: var(--danger); overflow: visible; }
 .tblk.err::after { content: " ⟳"; color: var(--accent); }
-.tblk.active { outline: 2px solid var(--hl-line); background: var(--hl); }
-/* rê chuột: hiện đầy đủ đoạn dịch dù đã bị thu gọn */
-.tblk:hover { z-index: 25; max-height: none !important; overflow: visible !important; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.28); }
+/* rê chuột / bấm ghim: hiện đầy đủ, nổi lên trên, tô sáng cả 2 bên */
+.tblk.hot, .tblk:hover {
+  z-index: 60; height: auto !important; overflow: visible !important;
+  background: #fff; outline: 2px solid var(--hl-line);
+  box-shadow: 0 8px 26px rgba(16, 24, 40, 0.3);
+}
 
 /* ---------- Màn hình thả file ---------- */
 #drop {
@@ -235,7 +245,7 @@ body.is-pdf.mode-image .imgonly { display: inline-flex; }
     --accent-weak: #17233a;
     --hl: #4a3f16; --hl-line: #b8912f;
     --track: #262c34;
-    --ghost: 0.9;
+    --ghost: 0.8;
     --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-2: 0 6px 22px rgba(0, 0, 0, 0.5);
   }
