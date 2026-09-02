@@ -29,7 +29,18 @@ $("source").value = cfg.source || "auto";
 if (cfg.target) $("target").value = cfg.target;
 if (cfg.mode) state.mode = cfg.mode;
 if (cfg.sync === false) $("syncChk").checked = false;
-if (cfg.ratio) $("split").style.gridTemplateColumns = `${cfg.ratio}fr 6px ${1 - cfg.ratio}fr`;
+const isMobile = () => matchMedia("(max-width: 820px)").matches;
+function applySplitLayout() {
+  const s = $("split").style;
+  if (isMobile()) { s.gridTemplateColumns = ""; return; } // để CSS xếp trên–dưới
+  if (state.mode === "image" && state.kind === "pdf") {
+    s.gridTemplateColumns = "1fr 8px 1fr"; // khoá 50/50 để 2 bên khớp
+  } else {
+    s.gridTemplateColumns = cfg.ratio
+      ? `${cfg.ratio}fr 8px ${1 - cfg.ratio}fr`
+      : "1fr 8px 1fr";
+  }
+}
 toggleKey();
 
 function toast(msg, ms = 3200) {
@@ -106,6 +117,7 @@ function onOpened(data) {
   } else {
     document.body.classList.remove("is-pdf", "mode-image");
     $("btnAll").textContent = "⚡ Dịch toàn bộ";
+    applySplitLayout();
     buildTextBlocks(data.blocks.map((b) => ({ ...b, page: null })), false);
     toast(`${data.blocks.length} đoạn`, 3500);
     kickVisible();
@@ -165,10 +177,9 @@ async function loadRange(keepView) {
 
   const imageMode = state.mode === "image";
   document.body.classList.toggle("mode-image", imageMode);
+  applySplitLayout();
 
   if (imageMode) {
-    // khoá tỉ lệ 50/50 để 2 bên khớp tuyệt đối
-    $("split").style.gridTemplateColumns = "1fr 8px 1fr";
     const fragL = document.createDocumentFragment(), fragR = document.createDocumentFragment();
     for (let p = from; p <= to; p++) {
       const src = `/api/page-image/${state.docId}/${p}?scale=2`;
@@ -192,8 +203,6 @@ async function loadRange(keepView) {
       io.observe(lw);
     }
     colL.appendChild(fragL); colR.appendChild(fragR);
-  } else {
-    $("split").style.gridTemplateColumns = cfg.ratio ? `${cfg.ratio}fr 8px ${1 - cfg.ratio}fr` : "1fr 8px 1fr";
   }
 
   toast(`Đang đọc chữ trang ${from}–${to}…`, 2500);
@@ -548,16 +557,22 @@ function reTranslate() {
 
 const divider = $("divider");
 let dragging = false;
-divider.addEventListener("pointerdown", (e) => { dragging = true; divider.setPointerCapture(e.pointerId); });
+divider.addEventListener("pointerdown", (e) => {
+  if (isMobile()) return; // trên điện thoại 2 khung xếp trên–dưới, không kéo ngang
+  dragging = true; divider.setPointerCapture(e.pointerId);
+});
 divider.addEventListener("pointermove", (e) => {
-  if (!dragging) return;
+  if (!dragging || isMobile()) return;
+  if (state.mode === "image" && state.kind === "pdf") return; // chế độ ảnh khoá 50/50
   const r = $("split").getBoundingClientRect();
   let ratio = (e.clientX - r.left) / r.width;
   ratio = Math.max(0.2, Math.min(0.8, ratio));
-  $("split").style.gridTemplateColumns = `${ratio}fr 6px ${1 - ratio}fr`;
+  $("split").style.gridTemplateColumns = `${ratio}fr 8px ${1 - ratio}fr`;
   cfg.ratio = ratio;
 });
-divider.addEventListener("pointerup", (e) => { dragging = false; divider.releasePointerCapture(e.pointerId); saveCfg(); });
+divider.addEventListener("pointerup", (e) => { dragging = false; try { divider.releasePointerCapture(e.pointerId); } catch {} saveCfg(); });
+
+window.addEventListener("resize", () => { clearTimeout(window._sl); window._sl = setTimeout(applySplitLayout, 150); });
 
 /* ---------- xuất file ---------- */
 function collectPairs() {
