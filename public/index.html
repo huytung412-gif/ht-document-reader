@@ -16,10 +16,6 @@
         <img id="brand" src="brand.svg" alt="HT Document Reader" onerror="this.style.display='none'" />
         <button id="btnOpen" class="btn primary">📄 Mở tài liệu</button>
         <span id="docName" class="docname">Chưa có tài liệu</span>
-        <span class="seg pdfonly" id="modeToggle">
-          <button id="mImg" class="segbtn on">🖼 Ảnh gốc</button>
-          <button id="mTxt" class="segbtn">📝 Chỉ chữ</button>
-        </span>
         <button id="barToggle" class="btn sm" aria-label="Công cụ">⚙️ Công cụ</button>
       </div>
 
@@ -35,6 +31,10 @@
       </div>
 
       <div class="grp pdfonly">
+        <span class="seg" id="modeToggle">
+          <button id="mImg" class="segbtn on">🖼 Ảnh gốc</button>
+          <button id="mTxt" class="segbtn">📝 Chỉ chữ</button>
+        </span>
         <span class="zoomctl imgonly">
           <button id="zOut" class="btn sm">🔍−</button>
           <button id="zIn" class="btn sm">🔍+</button>
@@ -239,14 +239,15 @@
         <img class="droplogo" src="brand.svg" alt="HT Document Reader" onerror="this.style.display='none'" />
         <h2>HT Document Reader</h2>
         <p class="slogan">Đọc hiểu – Dịch nhanh – Nắm trọn nội dung</p>
-        <p>Kéo thả file vào đây · Hỗ trợ <b>PDF</b> (xem ảnh trang gốc, kể cả PDF scan), <b>Word .docx</b>, <b>.txt</b>, <b>.md</b></p>
+        <p>Kéo thả file vào đây · Hỗ trợ <b>PDF</b> (xem ảnh trang gốc, kể cả PDF scan),
+          <b>Word</b> .docx, <b>Excel</b> .xlsx/.csv, <b>PowerPoint</b> .pptx, .html, .rtf, .txt, .md</p>
         <button id="btnOpen2" class="btn primary">Chọn file từ máy</button>
         <p class="hint">Với PDF: mở tức thì, bạn chọn dải trang muốn dịch (không phải chờ cả file).</p>
         <p class="author">Tác giả: <b>Huy Tùng UTC</b></p>
       </div>
     </div>
 
-    <input id="file" type="file" class="hidden" accept=".pdf,.docx,.txt,.md,.markdown,.text,.log,.csv" />
+    <input id="file" type="file" class="hidden" accept=".pdf,.docx,.xlsx,.xls,.xlsm,.ods,.csv,.tsv,.pptx,.html,.htm,.rtf,.txt,.md,.markdown,.text,.log,.json" />
     <div id="toast" class="hidden"></div>
     <div id="credit" title="HT Document Reader">by Huy Tùng UTC</div>
     <script src="app.js"></script>

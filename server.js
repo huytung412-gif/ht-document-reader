@@ -11,8 +11,7 @@ import {
   pdfPageBlocks,
   pdfPageImage,
   ocrPdfPages,
-  extractDocx,
-  extractText,
+  extractNonPdf,
   kindOf,
 } from "./lib/extract.js";
 import { translateMany } from "./lib/translate.js";
@@ -329,10 +328,10 @@ app.post("/api/open", requireApproved, upload.single("file"), async (req, res) =
     const buf = req.file.buffer;
     const name = Buffer.from(req.file.originalname, "latin1").toString("utf8");
     const kind = kindOf(name);
-    if (kind === "doc")
+    if (kind === "doc" || kind === "ppt")
       return res.status(400).json({
         error:
-          "File .doc (Word cũ) chưa hỗ trợ. Mở bằng Word rồi lưu lại thành .docx.",
+          "File Office đời cũ (.doc / .ppt) chưa hỗ trợ. Mở bằng Office rồi lưu lại thành .docx / .pptx.",
       });
 
     const docId = crypto.createHash("sha1").update(buf).digest("hex").slice(0, 16);
@@ -348,8 +347,7 @@ app.post("/api/open", requireApproved, upload.single("file"), async (req, res) =
           JSON.stringify({ name, kind, pages })
         );
       } else {
-        const parsed =
-          kind === "docx" ? await extractDocx(buf) : extractText(buf);
+        const parsed = await extractNonPdf(kind, buf);
         entry = {
           name,
           kind: parsed.kind,
