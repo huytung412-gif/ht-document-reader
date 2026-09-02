@@ -166,6 +166,7 @@
       <div class="grp hidden" id="userChip">
         <button id="btnInstall2" class="btn sm hidden">📲 Cài app</button>
         <button id="btnUsers" class="btn sm hidden">👥 Người dùng</button>
+        <button id="btnPw" class="btn sm">🔑 Đổi mật khẩu</button>
         <span id="meEmail" class="meemail"></span>
         <button id="btnLogout" class="btn sm">Đăng xuất</button>
       </div>
@@ -209,6 +210,18 @@
           <button id="adminClose" class="btn sm">Đóng</button>
         </div>
         <div id="adminList" class="adminlist"></div>
+      </div>
+    </div>
+
+    <div id="pwModal" class="hidden">
+      <div class="admincard" style="width:340px">
+        <div class="adminhead"><b>Đổi mật khẩu</b><button id="pwClose" class="btn sm">Đóng</button></div>
+        <div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+          <input id="pwCur" type="password" placeholder="Mật khẩu hiện tại (bỏ trống nếu đăng nhập bằng Google)" autocomplete="current-password" />
+          <input id="pwNew" type="password" placeholder="Mật khẩu mới (ít nhất 6 ký tự)" autocomplete="new-password" />
+          <div id="pwMsg" class="authmsg"></div>
+          <button id="pwSave" class="btn primary wide">Lưu</button>
+        </div>
       </div>
     </div>
 

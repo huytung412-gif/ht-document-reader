@@ -46,6 +46,21 @@ function setSessionCookie(req, res, token) {
     `dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}${secure}`
   );
 }
+// ---- Chặn dò mật khẩu: giới hạn số lần thử theo IP ----
+const attempts = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, a] of attempts) if (now - a.first > 15 * 60 * 1000) attempts.delete(k);
+}, 5 * 60 * 1000).unref();
+function tooMany(key, max = 12, windowMs = 10 * 60 * 1000) {
+  const now = Date.now();
+  let a = attempts.get(key);
+  if (!a || now - a.first > windowMs) { a = { n: 0, first: now }; attempts.set(key, a); }
+  a.n++;
+  return a.n > max;
+}
+function clearTries(key) { attempts.delete(key); }
+
 function requireApproved(req, res, next) {
   const u = auth.currentUser(getToken(req));
   if (!u) return res.status(401).json({ error: "Cần đăng nhập." });
@@ -93,6 +108,9 @@ async function notifyAdmins(req, u) {
 }
 
 app.post("/api/auth/register", async (req, res) => {
+  const key = "reg:" + (req.ip || "?");
+  if (tooMany(key, 6))
+    return res.status(429).json({ error: "Đăng ký quá nhiều lần. Thử lại sau." });
   try {
     const u = auth.register(req.body?.email, req.body?.password);
     setSessionCookie(req, res, auth.sign(u.email));
@@ -131,10 +149,23 @@ app.get("/api/admin/action", (req, res) => {
   }
 });
 app.post("/api/auth/login", (req, res) => {
+  const key = "login:" + (req.ip || "?");
+  if (tooMany(key))
+    return res.status(429).json({ error: "Thử quá nhiều lần. Đợi ~10 phút rồi thử lại." });
   try {
     const u = auth.login(req.body?.email, req.body?.password);
+    clearTries(key);
     setSessionCookie(req, res, auth.sign(u.email));
     res.json({ email: u.email, status: u.status, role: u.role });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post("/api/auth/password", requireApproved, (req, res) => {
+  try {
+    auth.changePassword(req.user.email, req.body?.current, req.body?.next);
+    res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -212,16 +243,34 @@ const upload = multer({
 
 // docId -> { name, kind, pages, buffer, pdf, atime, blocks? }
 const mem = new Map();
+const FILE_TTL = 3 * 60 * 60 * 1000; // tự xoá file tải lên sau ~3 giờ không dùng
+
+function purgeDocFiles(id) {
+  const targets = [
+    path.join(UP, id + ".bin"),
+    path.join(UP, id + ".json"),
+    path.join(IMGC, id),
+    path.join(TXTC, id),
+  ];
+  for (const t of targets) {
+    try { fs.rmSync(t, { recursive: true, force: true }); } catch {}
+  }
+}
 setInterval(() => {
   const now = Date.now();
   for (const [id, d] of mem) {
-    if (now - d.atime > 15 * 60 * 1000) {
-      d.pdf = null;
-      d.buffer = null;
-      if (now - d.atime > 60 * 60 * 1000) mem.delete(id);
-    }
+    if (now - d.atime > 15 * 60 * 1000) { d.pdf = null; d.buffer = null; }
+    if (now - d.atime > FILE_TTL) { mem.delete(id); purgeDocFiles(id); }
   }
-}, 5 * 60 * 1000).unref();
+  // Quét cả file mồ côi trên đĩa (server khởi động lại làm mất mem).
+  try {
+    for (const f of fs.readdirSync(UP)) {
+      if (!f.endsWith(".bin")) continue;
+      const p = path.join(UP, f);
+      if (now - fs.statSync(p).mtimeMs > FILE_TTL) purgeDocFiles(f.replace(/\.bin$/, ""));
+    }
+  } catch {}
+}, 10 * 60 * 1000).unref();
 
 function getEntry(docId) {
   const d = mem.get(docId);

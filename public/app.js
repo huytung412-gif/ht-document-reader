@@ -752,6 +752,29 @@ async function logout() {
 $("btnLogout").onclick = logout;
 $("btnLogout2").onclick = logout;
 
+/* Đổi mật khẩu */
+$("btnPw").onclick = () => {
+  $("pwCur").value = ""; $("pwNew").value = "";
+  $("pwMsg").textContent = ""; $("pwMsg").className = "authmsg";
+  $("pwModal").classList.remove("hidden");
+};
+$("pwClose").onclick = () => $("pwModal").classList.add("hidden");
+$("pwModal").addEventListener("click", (e) => { if (e.target === $("pwModal")) $("pwModal").classList.add("hidden"); });
+$("pwSave").onclick = async () => {
+  const next = $("pwNew").value;
+  if (!next || next.length < 6) {
+    $("pwMsg").textContent = "Mật khẩu mới tối thiểu 6 ký tự."; $("pwMsg").className = "authmsg err"; return;
+  }
+  $("pwMsg").textContent = "Đang lưu…"; $("pwMsg").className = "authmsg";
+  try {
+    await apiJSON("/api/auth/password", { current: $("pwCur").value, next });
+    $("pwMsg").textContent = "Đã đổi mật khẩu ✓"; $("pwMsg").className = "authmsg ok";
+    setTimeout(() => $("pwModal").classList.add("hidden"), 1200);
+  } catch (e) {
+    $("pwMsg").textContent = e.message; $("pwMsg").className = "authmsg err";
+  }
+};
+
 $("btnUsers").onclick = openAdmin;
 $("adminClose").onclick = () => $("adminModal").classList.add("hidden");
 $("adminModal").addEventListener("click", (e) => {
