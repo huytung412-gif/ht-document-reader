@@ -16,6 +16,10 @@
         <img id="brand" src="brand.svg" alt="HT Document Reader" onerror="this.style.display='none'" />
         <button id="btnOpen" class="btn primary">📄 Mở tài liệu</button>
         <span id="docName" class="docname">Chưa có tài liệu</span>
+        <span class="seg pdfonly" id="modeToggle">
+          <button id="mImg" class="segbtn on">🖼 Ảnh gốc</button>
+          <button id="mTxt" class="segbtn">📝 Chỉ chữ</button>
+        </span>
         <button id="barToggle" class="btn sm" aria-label="Công cụ">⚙️ Công cụ</button>
       </div>
 
@@ -31,10 +35,6 @@
       </div>
 
       <div class="grp pdfonly">
-        <span class="seg">
-          <button id="mImg" class="segbtn on">🖼 Ảnh gốc</button>
-          <button id="mTxt" class="segbtn">📝 Chỉ chữ</button>
-        </span>
         <span class="zoomctl imgonly">
           <button id="zOut" class="btn sm">🔍−</button>
           <button id="zIn" class="btn sm">🔍+</button>
