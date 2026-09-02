@@ -707,7 +707,11 @@ function hideGate(me) {
   gate.classList.add("hidden");
   $("userChip").classList.remove("hidden");
   $("meEmail").textContent = me.email;
-  $("btnUsers").classList.toggle("hidden", me.role !== "admin");
+  const isAdmin = me.role === "admin";
+  $("btnUsers").classList.toggle("hidden", !isAdmin);
+  // Admin vào app: mở luôn bảng "Quản lý người dùng" để xem có ai chờ duyệt không,
+  // xem xong bấm "Đóng" là sang phần dịch bình thường.
+  if (isAdmin) openAdmin();
 }
 $("btnContinue").onclick = () => { if (sessionMe) hideGate(sessionMe); };
 $("btnOtherAcct").onclick = async () => {
@@ -873,11 +877,20 @@ async function openAdmin() {
   $("adminModal").classList.remove("hidden");
   const list = $("adminList");
   list.innerHTML = "<div class='urow'>Đang tải…</div>";
+  const msg = $("adminMsg");
+  if (msg) { msg.textContent = ""; msg.className = "authmsg"; }
   try {
     const { users } = await apiJSON("/api/admin/users");
     list.innerHTML = "";
     if (!users.length) { list.innerHTML = "<div class='urow'>Chưa có tài khoản nào.</div>"; return; }
     for (const u of users) list.appendChild(userRow(u));
+    const nPending = users.filter((u) => u.status === "pending").length;
+    if (msg) {
+      msg.textContent = nPending
+        ? `⏳ Có ${nPending} người đang chờ bạn duyệt.`
+        : "✔ Không có ai đang chờ duyệt. Bấm “Đóng” để sang phần dịch.";
+      msg.className = "authmsg " + (nPending ? "err" : "ok");
+    }
   } catch (e) {
     list.innerHTML = "<div class='urow'>Lỗi: " + esc(e.message) + "</div>";
   }
