@@ -23,7 +23,18 @@ services:
       # (Tuỳ chọn) bật nút "Đăng nhập bằng Google" — dán Client ID web từ Google Cloud.
       - key: GOOGLE_CLIENT_ID
         value: ""
-      # (Tuỳ chọn) gửi email báo admin khi có người xin quyền (Gmail + App password).
+      # Gửi email báo admin khi có người xin quyền.
+      # CÁCH TỐT NHẤT trên Render Free (Render chặn cổng SMTP): tạo tài khoản Brevo
+      # miễn phí -> xác minh email người gửi -> lấy API key (v3) dán vào đây,
+      # và đặt MAIL_FROM = đúng email người gửi đã xác minh.
+      - key: BREVO_API_KEY
+        value: ""
+      - key: MAIL_FROM
+        value: ""
+      # (Cách khác) Resend API key thay cho Brevo.
+      - key: RESEND_API_KEY
+        value: ""
+      # (Chỉ dùng khi nơi chạy KHÔNG chặn SMTP) Gmail + App password.
       - key: SMTP_USER
         value: ""
       - key: SMTP_PASS

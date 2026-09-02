@@ -16,7 +16,7 @@ import {
 } from "./lib/extract.js";
 import { translateMany } from "./lib/translate.js";
 import * as auth from "./lib/auth.js";
-import { sendMail, mailEnabled } from "./lib/mailer.js";
+import { sendMail, mailEnabled, mailMode } from "./lib/mailer.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const UP = path.join(ROOT, "uploads");
@@ -331,16 +331,20 @@ app.post("/api/admin/delete", requireAdmin, (req, res) => {
 
 app.post("/api/admin/test-mail", requireAdmin, async (req, res) => {
   if (!mailEnabled)
-    return res.json({ ok: false, error: "Chưa cấu hình SMTP_USER / SMTP_PASS trên máy chủ." });
+    return res.json({
+      ok: false,
+      error:
+        "Chưa cấu hình gửi mail. Đặt BREVO_API_KEY (khuyên dùng) hoặc RESEND_API_KEY, hoặc SMTP_USER+SMTP_PASS trên Render.",
+    });
   try {
     await sendMail(
       auth.ADMIN_EMAILS.join(","),
       "[HT Reader] Email thử nghiệm",
-      `<p style="font-family:Segoe UI,Arial,sans-serif">Nếu bạn nhận được email này, chức năng gửi email báo admin đang <b>hoạt động tốt</b>. ✔</p>`
+      `<p style="font-family:Segoe UI,Arial,sans-serif">Nếu bạn nhận được email này, chức năng gửi email báo admin đang <b>hoạt động tốt</b>. ✔ (kênh gửi: ${mailMode})</p>`
     );
-    res.json({ ok: true });
+    res.json({ ok: true, mode: mailMode });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, mode: mailMode, error: e.message });
   }
 });
 
