@@ -104,9 +104,46 @@ function onOpened(data) {
   }
 }
 
+/* ---------- Ghi / khôi phục vị trí đang xem (giữ nguyên khi đổi chế độ) ---------- */
+function viewAnchor() {
+  const kids = colL.children;
+  if (!kids.length) return null;
+  const top = paneL.scrollTop;
+  let lo = 0, hi = kids.length - 1, ans = hi;
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1, e = kids[m];
+    if (e.offsetTop + e.offsetHeight > top) { ans = m; hi = m - 1; } else lo = m + 1;
+  }
+  const el = kids[ans];
+  const frac = Math.min(1, Math.max(0, (top - el.offsetTop) / Math.max(1, el.offsetHeight)));
+  let page = null;
+  if (el.dataset && el.dataset.page) page = +el.dataset.page;
+  else if (el.classList.contains("pagesep")) {
+    const mm = el.textContent.match(/(\d+)/); page = mm ? +mm[1] : null;
+  } else if (el.dataset && el.dataset.i && state.pageOf.has(el.dataset.i)) {
+    page = state.pageOf.get(el.dataset.i);
+  }
+  return { page, frac, ratio: kids.length ? ans / kids.length : 0 };
+}
+function restoreView(a) {
+  if (!a) return;
+  let target = null;
+  if (a.page != null) {
+    target = colL.querySelector(`.pagewrap[data-page="${a.page}"]`);
+    if (!target)
+      target = [...colL.querySelectorAll(".pagesep")].find((s) =>
+        new RegExp(`\\b${a.page}\\b`).test(s.textContent)
+      );
+  }
+  if (target) paneL.scrollTop = target.offsetTop + a.frac * target.offsetHeight;
+  else paneL.scrollTop = a.ratio * (paneL.scrollHeight - paneL.clientHeight);
+  resyncNow();
+}
+
 /* ---------- PDF: nạp một dải trang ---------- */
-async function loadRange() {
+async function loadRange(keepView) {
   if (state.kind !== "pdf") return;
+  const anchor = keepView ? viewAnchor() : null;
   let from = Math.max(1, parseInt($("pgFrom").value, 10) || 1);
   let to = Math.min(state.pages, parseInt($("pgTo").value, 10) || from);
   if (to < from) to = from;
@@ -197,7 +234,15 @@ async function loadRange() {
   }
   if (data.scanned && data.scanned.length)
     toast(`Trang ${data.scanned.join(", ")} là ảnh scan — đã thử OCR.`, 4500);
-  paneL.scrollTop = 0; paneR.scrollTop = 0;
+  if (anchor) {
+    // căn lại nhiều lần vì bố cục còn xê dịch khi ảnh/bản dịch nạp xong
+    const reapply = () => restoreView(anchor);
+    requestAnimationFrame(() => requestAnimationFrame(reapply));
+    setTimeout(reapply, 260);
+    setTimeout(reapply, 800);
+  } else {
+    paneL.scrollTop = 0; paneR.scrollTop = 0;
+  }
   kickVisible();
 }
 
@@ -446,13 +491,19 @@ function setMode(m) {
   state.mode = m; cfg.mode = m; saveCfg();
   $("mImg").classList.toggle("on", m === "image");
   $("mTxt").classList.toggle("on", m === "text");
-  loadRange();
+  loadRange(true); // giữ nguyên vị trí đang xem
 }
 $("mImg").classList.toggle("on", state.mode === "image");
 $("mTxt").classList.toggle("on", state.mode === "text");
 $("zIn").onclick = () => setZoom(cfg.zoom + 12);
 $("zOut").onclick = () => setZoom(cfg.zoom - 12);
-function setZoom(v) { cfg.zoom = Math.max(40, Math.min(220, v)); document.documentElement.style.setProperty("--zoom", cfg.zoom); saveCfg(); refitAll(); }
+function setZoom(v) {
+  const a = viewAnchor();
+  cfg.zoom = Math.max(40, Math.min(220, v));
+  document.documentElement.style.setProperty("--zoom", cfg.zoom);
+  saveCfg(); refitAll();
+  requestAnimationFrame(() => restoreView(a));
+}
 
 /* ---------- toolbar chung ---------- */
 $("fPlus").onclick = () => setFont(cfg.font + 1);
