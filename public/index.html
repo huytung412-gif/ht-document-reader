@@ -177,17 +177,19 @@
       <div class="authcard">
         <img class="authlogo" src="brand.svg" alt="" onerror="this.style.display='none'" />
         <h2>HT Document Reader</h2>
-        <p class="slogan">Đăng nhập bằng email để sử dụng</p>
+        <p class="slogan">Đăng nhập để dùng ứng dụng</p>
         <div id="gsiWrap" class="hidden">
           <div id="gsi"></div>
-          <div class="gsi-or"><span>hoặc dùng email</span></div>
+          <div class="gsi-or"><span>hoặc dùng email + mật khẩu</span></div>
         </div>
         <div id="authForm">
           <input id="authEmail" type="email" placeholder="Email" autocomplete="username" />
           <input id="authPw" type="password" placeholder="Mật khẩu (ít nhất 6 ký tự)" autocomplete="current-password" />
           <div id="authMsg" class="authmsg"></div>
           <button id="btnLogin" class="btn primary wide">Đăng nhập</button>
-          <button id="btnRegister" class="btn wide">Đăng ký tài khoản mới</button>
+          <button id="btnRegister" class="btn wide">Lần đầu? Đăng ký tài khoản mới</button>
+          <p class="authhint">Đăng ký xong cần <b>admin duyệt</b> mới vào được (thường vài phút).
+            Sau khi được duyệt, lần sau mở app là <b>vào thẳng</b>, không phải nhập lại.</p>
         </div>
         <div id="authPending" class="hidden">
           <p class="authmsg">Tài khoản <b id="pendingEmail"></b> đang <b>chờ admin duyệt</b>.<br />
