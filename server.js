@@ -239,11 +239,12 @@ app.post("/api/pages-text", async (req, res) => {
 // ---------------- Dịch (không phụ thuộc phiên) ----------------
 app.post("/api/translate", async (req, res) => {
   try {
-    const { items, target, engine, apiKey, model, domain } = req.body || {};
+    const { items, source, target, engine, apiKey, model, domain } = req.body || {};
     if (!Array.isArray(items) || !items.length)
       return res.json({ translations: {}, engine: "none" });
     const texts = items.map((x) => x.text || "");
     const { translations, engine: used } = await translateMany(texts, {
+      source: source || "auto",
       target: target || "vi",
       engine: engine || "auto",
       apiKey,

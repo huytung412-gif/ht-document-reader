@@ -23,6 +23,10 @@ document.documentElement.style.setProperty("--zoom", cfg.zoom);
 if (cfg.target) $("target").value = cfg.target;
 if (cfg.engine) $("engine").value = cfg.engine;
 if (cfg.domain) $("domain").value = cfg.domain;
+// Ô "Dịch từ" dùng lại danh sách ngôn ngữ của ô "Dịch sang".
+$("source").insertAdjacentHTML("beforeend", $("target").innerHTML.replace(/\s+selected/g, ""));
+$("source").value = cfg.source || "auto";
+if (cfg.target) $("target").value = cfg.target;
 if (cfg.mode) state.mode = cfg.mode;
 if (cfg.sync === false) $("syncChk").checked = false;
 if (cfg.ratio) $("split").style.gridTemplateColumns = `${cfg.ratio}fr 6px ${1 - cfg.ratio}fr`;
@@ -259,7 +263,7 @@ async function translateBatch(idx) {
   const items = idx.map((i) => ({ i, text: state.src.get(i) || "" }));
   try {
     const data = await apiJSON("/api/translate", {
-      items, target: $("target").value, engine: $("engine").value,
+      items, source: $("source").value, target: $("target").value, engine: $("engine").value,
       domain: $("domain").value,
       apiKey: $("apiKey").value.trim() || undefined,
     });
@@ -351,7 +355,7 @@ $("btnFull").onclick = async () => {
         const chunk = items.slice(k, k + 60);
         try {
           const res = await apiJSON("/api/translate", {
-            items: chunk, target: $("target").value, engine: $("engine").value,
+            items: chunk, source: $("source").value, target: $("target").value, engine: $("engine").value,
             domain: $("domain").value,
             apiKey: $("apiKey").value.trim() || undefined,
           });
@@ -454,6 +458,7 @@ function setZoom(v) { cfg.zoom = Math.max(40, Math.min(220, v)); document.docume
 $("fPlus").onclick = () => setFont(cfg.font + 1);
 $("fMinus").onclick = () => setFont(cfg.font - 1);
 function setFont(v) { cfg.font = Math.max(12, Math.min(30, v)); document.documentElement.style.setProperty("--font-scale", cfg.font + "px"); saveCfg(); }
+$("source").onchange = () => { cfg.source = $("source").value; saveCfg(); reTranslate(); };
 $("target").onchange = () => { cfg.target = $("target").value; saveCfg(); reTranslate(); };
 $("engine").onchange = () => { cfg.engine = $("engine").value; saveCfg(); toggleKey(); reTranslate(); };
 $("domain").onchange = () => {
