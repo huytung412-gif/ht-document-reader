@@ -534,8 +534,18 @@ app.post("/api/pages-text", requireApproved, async (req, res) => {
       pages.push(rec);
     }
 
-    // OCR các trang trống nếu dải trang không quá lớn
-    if (scanned.length && to - from + 1 <= 30) {
+    // OCR các trang không có sẵn chữ (bản scan). Giới hạn số trang OCR mỗi lượt
+    // để máy chủ gói free không quá tải; phần còn lại báo cho client mở tiếp.
+    const OCR_MAX = 20;
+    let ocrNote = null;
+    let ocrList = scanned;
+    if (scanned.length > OCR_MAX) {
+      ocrList = scanned.slice(0, OCR_MAX);
+      ocrNote =
+        `Tài liệu là bản scan. Mỗi lượt chỉ nhận dạng ${OCR_MAX} trang. ` +
+        `Đã xử lý tới trang ${ocrList[ocrList.length - 1]}; hãy mở dải trang nhỏ hơn.`;
+    }
+    if (ocrList.length) {
       try {
         if (!entry.buffer) {
           const bp = path.join(UP, docId + ".bin");
@@ -543,7 +553,7 @@ app.post("/api/pages-text", requireApproved, async (req, res) => {
         }
         const map = await ocrPdfPages(
           entry.buffer,
-          scanned.map((p) => p - 1)
+          ocrList.map((p) => p - 1)
         );
         for (const pg of pages) {
           const arr = map.get(pg.page - 1);
@@ -566,7 +576,7 @@ app.post("/api/pages-text", requireApproved, async (req, res) => {
       }
     }
 
-    res.json({ from, to, pages, scanned });
+    res.json({ from, to, pages, scanned, ocrNote });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message || "Lỗi đọc trang." });

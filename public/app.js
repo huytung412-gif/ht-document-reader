@@ -249,8 +249,14 @@ async function loadRange(keepView) {
     }
     colL.appendChild(fragL); colR.appendChild(fragR);
   }
-  if (data.scanned && data.scanned.length)
-    toast(`Trang ${data.scanned.join(", ")} là ảnh scan — đã thử OCR.`, 4500);
+  if (data.ocrNote) toast(data.ocrNote, 8000);
+  else if (data.scanned && data.scanned.length)
+    toast(`Tài liệu là bản scan — đã nhận dạng chữ (OCR) ${data.scanned.length} trang.`, 5000);
+  // Bản scan: OCR không có toạ độ từng đoạn nên chế độ "Ảnh gốc" không phủ được
+  // bản dịch lên đúng chỗ -> gợi ý chuyển sang "Chỉ chữ".
+  if (imageMode && data.scanned && data.scanned.length >= data.pages.length && data.pages.length) {
+    toast("Đây là bản scan — hãy bấm “📝 Chỉ chữ” để đọc bản dịch rõ hơn.", 8000);
+  }
   if (anchor) {
     // căn lại nhiều lần vì bố cục còn xê dịch khi ảnh/bản dịch nạp xong
     const reapply = () => restoreView(anchor);
