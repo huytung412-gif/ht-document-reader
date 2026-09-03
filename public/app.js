@@ -174,6 +174,7 @@ async function loadRange(keepView) {
   state.src.clear(); state.trans.clear(); state.lEl.clear(); state.rEl.clear(); state.pageIdx.clear(); state.pageOf.clear(); state.pinned.clear();
   state.translated.clear(); state.requested.clear(); state.pending.clear();
   colL.innerHTML = ""; colR.innerHTML = ""; io.disconnect();
+  _ocrQ.length = 0; _ocrGen++; // huỷ mọi việc OCR của dải trang cũ
 
   const imageMode = state.mode === "image";
   document.body.classList.toggle("mode-image", imageMode);
@@ -315,7 +316,6 @@ function _loadScript(src) {
     document.head.appendChild(s);
   });
 }
-const TESS_V = "5.1.1", CORE_V = "5.1.0";
 let _ocrStatusEl = null;
 function _ocrLog(m) {
   if (!_ocrStatusEl || !m) return;
@@ -338,29 +338,30 @@ function _withTimeout(p, ms, msg) {
 async function ensureOcr() {
   if (_tessWorker) return _tessWorker;
   if (!_tessInit) _tessInit = (async () => {
+    if (_ocrStatusEl) _ocrStatusEl.textContent = "⏳ Đang tải bộ nhận dạng chữ…";
     if (!window.Tesseract) {
-      const cdns = [
-        `https://cdn.jsdelivr.net/npm/tesseract.js@${TESS_V}/dist/tesseract.min.js`,
-        `https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/${TESS_V}/tesseract.min.js`,
-        `https://unpkg.com/tesseract.js@${TESS_V}/dist/tesseract.min.js`,
+      // Tự phục vụ từ máy chủ trước (không bị CDN chặn); CDN chỉ là dự phòng.
+      const srcs = [
+        "/ocr/tess/tesseract.min.js",
+        "https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/6.0.1/tesseract.min.js",
       ];
       let ok = false;
-      for (const u of cdns) {
-        try { await _withTimeout(_loadScript(u), 20000, "timeout"); ok = !!window.Tesseract; if (ok) break; } catch {}
+      for (const u of srcs) {
+        try { await _withTimeout(_loadScript(u), 25000, "timeout"); ok = !!window.Tesseract; if (ok) break; } catch {}
       }
-      if (!ok) throw new Error("Không tải được thư viện OCR (mạng chặn CDN?). Bấm để thử lại.");
+      if (!ok) throw new Error("Không tải được thư viện OCR. Bấm để thử lại.");
     }
-    // Chỉ định rõ nguồn worker/lõi/dữ liệu ngôn ngữ để không phụ thuộc mặc định.
     const opts = {
-      workerPath: `https://cdn.jsdelivr.net/npm/tesseract.js@${TESS_V}/dist/worker.min.js`,
-      corePath: `https://cdn.jsdelivr.net/npm/tesseract.js-core@${CORE_V}/`,
-      langPath: "https://tessdata.projectnaptha.com/4.0.0_fast", // model gọn ~2MB
+      workerPath: "/ocr/tess/worker.min.js",
+      corePath: "/ocr/core",
+      langPath: "/ocr",          // chứa eng.traineddata.gz
       logger: _ocrLog,
     };
     _tessWorker = await _withTimeout(
       window.Tesseract.createWorker("eng", 1, opts),
-      120000,
-      "Tải bộ OCR (~15MB) quá lâu — mạng chậm hoặc bị chặn. Bấm để thử lại."
+      90000,
+      "Tải bộ OCR quá lâu — mạng chậm. Bấm để thử lại."
     );
     return _tessWorker;
   })().catch((e) => { _tessInit = null; throw e; });
@@ -372,7 +373,7 @@ function splitOcr(txt) {
   return parts.filter((s) => s.length >= 3 && /\p{L}{2,}/u.test(s));
 }
 const _ocrQ = [];
-let _ocrBusy = false, _ocrAnnounced = false;
+let _ocrBusy = false, _ocrAnnounced = false, _ocrGen = 0;
 function queueOcrPage(p) {
   if (!_ocrQ.includes(p)) _ocrQ.push(p);
   if (!_ocrAnnounced) {
@@ -384,13 +385,14 @@ function queueOcrPage(p) {
 async function pumpOcr() {
   if (_ocrBusy) return;
   _ocrBusy = true;
+  const gen = _ocrGen;
   try {
-    while (_ocrQ.length) {
+    while (_ocrQ.length && gen === _ocrGen) {
       const p = _ocrQ.shift();
       const ph = colL.querySelector('.blk.ocrwait[data-page="' + p + '"]');
       if (!ph) continue; // dải trang đã đổi
       _ocrStatusEl = ph;
-      await ocrPageNow(p);
+      await ocrPageNow(p, gen);
       _ocrStatusEl = null;
     }
   } finally { _ocrBusy = false; }
@@ -414,7 +416,7 @@ async function clientOcrBlocks(page) {
   );
   return splitOcr(data.text || "");
 }
-async function ocrPageNow(page) {
+async function ocrPageNow(page, gen) {
   const lph = colL.querySelector('.blk.ocrwait[data-page="' + page + '"]');
   const rph = colR.querySelector('.blk.ocrwait[data-page="' + page + '"]');
   if (!lph || !rph) return;
@@ -422,9 +424,10 @@ async function ocrPageNow(page) {
   try {
     paras = await clientOcrBlocks(page);
   } catch (e) {
-    _ocrFail(lph, e.message);
+    if (gen === _ocrGen) _ocrFail(lph, e.message);
     return;
   }
+  if (gen !== _ocrGen || !lph.isConnected) return; // dải trang đã đổi khi đang OCR
   try {
     if (!paras.length) {
       lph.classList.remove("ocrwait"); lph.textContent = `(Trang ${page}: không đọc được chữ)`;

@@ -30,6 +30,20 @@ app.set("trust proxy", 1);
 app.use(express.json({ limit: "8mb" }));
 app.use(express.static(path.join(ROOT, "public")));
 
+// Tài nguyên OCR chạy trên trình duyệt — phục vụ ngay từ máy chủ (không phụ
+// thuộc CDN, tránh việc mạng/tiện ích chặn). Thư viện lấy từ node_modules.
+const tessStatic = { immutable: true, maxAge: "30d" };
+app.use("/ocr/tess", express.static(path.join(ROOT, "node_modules/tesseract.js/dist"), tessStatic));
+app.use(
+  "/ocr/core",
+  express.static(path.join(ROOT, "node_modules/tesseract.js-core"), {
+    ...tessStatic,
+    setHeaders(res, p) {
+      if (p.endsWith(".wasm")) res.type("application/wasm");
+    },
+  })
+);
+
 /* ---------------- Đăng nhập / phân quyền ---------------- */
 function getToken(req) {
   const h = req.headers.authorization || "";
