@@ -534,12 +534,16 @@ app.post("/api/pages-text", requireApproved, async (req, res) => {
       pages.push(rec);
     }
 
-    // OCR các trang không có sẵn chữ (bản scan). Giới hạn số trang OCR mỗi lượt
-    // để máy chủ gói free không quá tải; phần còn lại báo cho client mở tiếp.
+    // OCR các trang không có sẵn chữ (bản scan).
+    // Máy chủ gói free (CPU ~0.1) OCR cực chậm -> request sẽ timeout. Vì vậy
+    // MẶC ĐỊNH để trình duyệt người dùng tự OCR (nhanh hơn nhiều). Chỉ OCR ở
+    // máy chủ khi bật SERVER_OCR=1 (chạy local / máy mạnh).
+    const serverOcr = process.env.SERVER_OCR === "1";
+    const clientOcr = !serverOcr && scanned.length > 0;
     const OCR_MAX = 20;
     let ocrNote = null;
-    let ocrList = scanned;
-    if (scanned.length > OCR_MAX) {
+    let ocrList = serverOcr ? scanned : [];
+    if (serverOcr && scanned.length > OCR_MAX) {
       ocrList = scanned.slice(0, OCR_MAX);
       ocrNote =
         `Tài liệu là bản scan. Mỗi lượt chỉ nhận dạng ${OCR_MAX} trang. ` +
@@ -576,7 +580,7 @@ app.post("/api/pages-text", requireApproved, async (req, res) => {
       }
     }
 
-    res.json({ from, to, pages, scanned, ocrNote });
+    res.json({ from, to, pages, scanned, ocrNote, clientOcr });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message || "Lỗi đọc trang." });

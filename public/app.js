@@ -210,6 +210,16 @@ async function loadRange(keepView) {
   try { data = await apiJSON("/api/pages-text", { docId: state.docId, from, to }); }
   catch (e) { toast("Lỗi đọc trang: " + e.message, 6000); return; }
 
+  // Bản scan: máy chủ không OCR (quá chậm trên gói free) -> trình duyệt tự OCR.
+  // Chế độ "Ảnh gốc" không phủ được bản dịch nên chuyển sang "Chỉ chữ".
+  if (data.clientOcr && state.mode === "image") {
+    toast("Tài liệu là bản scan — chuyển sang “Chỉ chữ” để nhận dạng & dịch.", 6000);
+    state.mode = "text"; cfg.mode = "text"; saveCfg();
+    $("mImg").classList.toggle("on", false);
+    $("mTxt").classList.toggle("on", true);
+    return loadRange(keepView);
+  }
+
   if (imageMode) {
     for (const pg of data.pages) {
       const par = pg.pageW && pg.pageH ? `${pg.pageW} / ${pg.pageH}` : "";
@@ -239,6 +249,16 @@ async function loadRange(keepView) {
       const sepL = document.createElement("div"); sepL.className = "pagesep"; sepL.textContent = `— Trang ${pg.page} —`;
       const sepR = sepL.cloneNode(true);
       fragL.appendChild(sepL); fragR.appendChild(sepR);
+      if (!pg.blocks.length && data.clientOcr) {
+        const lb = document.createElement("div");
+        lb.className = "blk ocrwait"; lb.dataset.page = pg.page;
+        lb.textContent = `⏳ Đang nhận dạng chữ trang ${pg.page}…`;
+        const rb = document.createElement("div");
+        rb.className = "blk ocrwait"; rb.dataset.page = pg.page; rb.textContent = "…";
+        fragL.appendChild(lb); fragR.appendChild(rb);
+        queueOcrPage(pg.page);
+        continue;
+      }
       for (const b of pg.blocks) {
         state.src.set(b.i, b.text); state.pageOf.set(b.i, pg.page);
         const lb = document.createElement("div"); lb.className = "blk"; lb.dataset.i = b.i; lb.textContent = b.text;
@@ -284,6 +304,113 @@ function placeBox(el, bbox, pg, k, strict) {
   }
   if (strict) el.style.overflow = "hidden";
 }
+
+/* ---------- OCR bản scan ngay trên trình duyệt (máy chủ free quá yếu) ---------- */
+let _tessWorker = null, _tessInit = null;
+function _loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = res;
+    s.onerror = () => rej(new Error("script fail: " + src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureOcr() {
+  if (_tessWorker) return _tessWorker;
+  if (!_tessInit) _tessInit = (async () => {
+    if (!window.Tesseract) {
+      const cdns = [
+        "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js",
+        "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+      ];
+      let ok = false;
+      for (const u of cdns) {
+        try { await _loadScript(u); ok = !!window.Tesseract; if (ok) break; } catch {}
+      }
+      if (!ok) throw new Error("Không tải được bộ nhận dạng chữ (OCR). Kiểm tra mạng rồi thử lại.");
+    }
+    _tessWorker = await window.Tesseract.createWorker("eng");
+    return _tessWorker;
+  })().catch((e) => { _tessInit = null; throw e; });
+  return _tessInit;
+}
+function splitOcr(txt) {
+  let parts = String(txt).split(/\n\s*\n+/).map((s) => s.replace(/\s*\n\s*/g, " ").trim());
+  if (parts.length <= 1) parts = String(txt).split(/\n/).map((s) => s.trim());
+  return parts.filter((s) => s.length >= 3 && /\p{L}{2,}/u.test(s));
+}
+const _ocrQ = [];
+let _ocrBusy = false, _ocrAnnounced = false;
+function queueOcrPage(p) {
+  if (!_ocrQ.includes(p)) _ocrQ.push(p);
+  if (!_ocrAnnounced) {
+    _ocrAnnounced = true;
+    toast("Bản scan: trình duyệt đang nhận dạng chữ. Lần đầu tải bộ OCR (~15MB) nên hơi lâu.", 7000);
+  }
+  pumpOcr();
+}
+async function pumpOcr() {
+  if (_ocrBusy) return;
+  _ocrBusy = true;
+  try {
+    while (_ocrQ.length) {
+      const p = _ocrQ.shift();
+      if (!colL.querySelector('.blk.ocrwait[data-page="' + p + '"]')) continue; // dải trang đã đổi
+      await ocrPageNow(p);
+    }
+  } finally { _ocrBusy = false; }
+}
+function _ocrFail(lph, msg) {
+  lph.classList.remove("ocrwait"); lph.classList.add("ocrfail");
+  lph.textContent = msg + "  ⟳ bấm để thử lại";
+}
+// OCR 1 trang ảnh -> mảng đoạn văn (không đụng DOM). Dùng cho cả xem theo dải
+// lẫn "Dịch toàn bộ".
+async function clientOcrBlocks(page) {
+  const worker = await ensureOcr();
+  const { data } = await worker.recognize(`/api/page-image/${state.docId}/${page}?scale=2`);
+  return splitOcr(data.text || "");
+}
+async function ocrPageNow(page) {
+  const lph = colL.querySelector('.blk.ocrwait[data-page="' + page + '"]');
+  const rph = colR.querySelector('.blk.ocrwait[data-page="' + page + '"]');
+  if (!lph || !rph) return;
+  let paras;
+  try {
+    paras = await clientOcrBlocks(page);
+  } catch (e) {
+    _ocrFail(lph, e.message);
+    return;
+  }
+  try {
+    if (!paras.length) {
+      lph.classList.remove("ocrwait"); lph.textContent = `(Trang ${page}: không đọc được chữ)`;
+      rph.remove();
+      return;
+    }
+    const fL = document.createDocumentFragment(), fR = document.createDocumentFragment();
+    paras.forEach((t, k) => {
+      const i = `${page}:${k}`;
+      state.src.set(i, t); state.pageOf.set(i, page);
+      const lb = document.createElement("div"); lb.className = "blk"; lb.dataset.i = i; lb.textContent = t;
+      const rb = document.createElement("div"); rb.className = "blk pending"; rb.dataset.i = i; rb.textContent = "…";
+      fL.appendChild(lb); fR.appendChild(rb);
+      state.lEl.set(i, lb); state.rEl.set(i, rb); io.observe(lb);
+    });
+    lph.replaceWith(fL); rph.replaceWith(fR);
+    kickVisible();
+  } catch (e) {
+    _ocrFail(lph, `Trang ${page}: lỗi OCR (${e.message}).`);
+  }
+}
+colL.addEventListener("click", (e) => {
+  const el = e.target.closest(".blk.ocrfail[data-page]");
+  if (!el) return;
+  const p = +el.dataset.page;
+  el.classList.remove("ocrfail"); el.classList.add("ocrwait");
+  el.textContent = `⏳ Đang nhận dạng lại trang ${p}…`;
+  queueOcrPage(p);
+});
 
 /* ---------- dịch: hàng đợi theo vùng nhìn ---------- */
 const io = new IntersectionObserver((ents) => {
@@ -414,6 +541,16 @@ $("btnFull").onclick = async () => {
       let data;
       try { data = await apiJSON("/api/pages-text", { docId: state.docId, from: p, to }); }
       catch (e) { toast("Lỗi đọc trang " + p + ": " + e.message, 5000); break; }
+      // Bản scan: OCR ngay trên trình duyệt để có chữ mà dịch.
+      if (data.clientOcr) {
+        for (const pg of data.pages) {
+          if (pg.blocks.length || !state.busyFull) continue;
+          try {
+            const paras = await clientOcrBlocks(pg.page);
+            pg.blocks = paras.map((t, k) => ({ i: `${pg.page}:${k}`, page: pg.page, text: t }));
+          } catch (e) { /* bỏ qua trang OCR lỗi */ }
+        }
+      }
       const items = [];
       for (const pg of data.pages) for (const b of pg.blocks) {
         if (!state.full.has(b.i)) state.full.set(b.i, { page: pg.page, src: b.text, trans: "" });
