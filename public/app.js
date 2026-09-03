@@ -315,21 +315,53 @@ function _loadScript(src) {
     document.head.appendChild(s);
   });
 }
+const TESS_V = "5.1.1", CORE_V = "5.1.0";
+let _ocrStatusEl = null;
+function _ocrLog(m) {
+  if (!_ocrStatusEl || !m) return;
+  const pct = m.progress != null ? ` ${Math.round(m.progress * 100)}%` : "";
+  const nice = {
+    "loading tesseract core": "Tải lõi OCR",
+    "initializing tesseract": "Khởi động OCR",
+    "loading language traineddata": "Tải dữ liệu tiếng Anh",
+    "initializing api": "Khởi động OCR",
+    "recognizing text": "Đang nhận dạng",
+  }[m.status] || "Đang xử lý";
+  _ocrStatusEl.textContent = `⏳ ${nice}${pct}…`;
+}
+function _withTimeout(p, ms, msg) {
+  return Promise.race([
+    p,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms)),
+  ]);
+}
 async function ensureOcr() {
   if (_tessWorker) return _tessWorker;
   if (!_tessInit) _tessInit = (async () => {
     if (!window.Tesseract) {
       const cdns = [
-        "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js",
-        "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+        `https://cdn.jsdelivr.net/npm/tesseract.js@${TESS_V}/dist/tesseract.min.js`,
+        `https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/${TESS_V}/tesseract.min.js`,
+        `https://unpkg.com/tesseract.js@${TESS_V}/dist/tesseract.min.js`,
       ];
       let ok = false;
       for (const u of cdns) {
-        try { await _loadScript(u); ok = !!window.Tesseract; if (ok) break; } catch {}
+        try { await _withTimeout(_loadScript(u), 20000, "timeout"); ok = !!window.Tesseract; if (ok) break; } catch {}
       }
-      if (!ok) throw new Error("Không tải được bộ nhận dạng chữ (OCR). Kiểm tra mạng rồi thử lại.");
+      if (!ok) throw new Error("Không tải được thư viện OCR (mạng chặn CDN?). Bấm để thử lại.");
     }
-    _tessWorker = await window.Tesseract.createWorker("eng");
+    // Chỉ định rõ nguồn worker/lõi/dữ liệu ngôn ngữ để không phụ thuộc mặc định.
+    const opts = {
+      workerPath: `https://cdn.jsdelivr.net/npm/tesseract.js@${TESS_V}/dist/worker.min.js`,
+      corePath: `https://cdn.jsdelivr.net/npm/tesseract.js-core@${CORE_V}/`,
+      langPath: "https://tessdata.projectnaptha.com/4.0.0_fast", // model gọn ~2MB
+      logger: _ocrLog,
+    };
+    _tessWorker = await _withTimeout(
+      window.Tesseract.createWorker("eng", 1, opts),
+      120000,
+      "Tải bộ OCR (~15MB) quá lâu — mạng chậm hoặc bị chặn. Bấm để thử lại."
+    );
     return _tessWorker;
   })().catch((e) => { _tessInit = null; throw e; });
   return _tessInit;
@@ -355,8 +387,11 @@ async function pumpOcr() {
   try {
     while (_ocrQ.length) {
       const p = _ocrQ.shift();
-      if (!colL.querySelector('.blk.ocrwait[data-page="' + p + '"]')) continue; // dải trang đã đổi
+      const ph = colL.querySelector('.blk.ocrwait[data-page="' + p + '"]');
+      if (!ph) continue; // dải trang đã đổi
+      _ocrStatusEl = ph;
       await ocrPageNow(p);
+      _ocrStatusEl = null;
     }
   } finally { _ocrBusy = false; }
 }
@@ -368,7 +403,15 @@ function _ocrFail(lph, msg) {
 // lẫn "Dịch toàn bộ".
 async function clientOcrBlocks(page) {
   const worker = await ensureOcr();
-  const { data } = await worker.recognize(`/api/page-image/${state.docId}/${page}?scale=2`);
+  // Tự tải ảnh kèm cookie phiên (endpoint yêu cầu đăng nhập) rồi đưa blob cho OCR.
+  const resp = await fetch(`/api/page-image/${state.docId}/${page}?scale=2`, { credentials: "same-origin" });
+  if (!resp.ok) throw new Error(`ảnh trang ${page}: HTTP ${resp.status}`);
+  const blob = await resp.blob();
+  const { data } = await _withTimeout(
+    worker.recognize(blob),
+    90000,
+    `trang ${page}: nhận dạng quá lâu`
+  );
   return splitOcr(data.text || "");
 }
 async function ocrPageNow(page) {

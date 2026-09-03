@@ -1,6 +1,6 @@
 // Service worker "network-first": LUÔN thử mạng trước, chỉ dùng bản lưu khi offline.
 // -> mã nguồn không bao giờ bị kẹt bản cũ, nhưng vẫn cài được thành app + chạy offline phần vỏ.
-const V = "dt-net-v1";
+const V = "dt-net-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 
